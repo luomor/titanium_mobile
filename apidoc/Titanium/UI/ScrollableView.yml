@@ -27,6 +27,9 @@ description: |
     the "Simple Scrollable View with 2 Zoomable Images" example for a demonstration.
 excludes:
     events: [ 'click', 'longclick', 'pinch', 'swipe', 'touchend', 'touchmove' ]
+    properties: [children]
+    methods: [add, remove, removeAllChildren, replaceAt]
+
 extends: Titanium.UI.View
 platforms: [android, iphone, ipad]
 since: "0.8"
@@ -79,8 +82,8 @@ methods:
     parameters:
       - name: view
         summary: |
-            A <Titanium.UI.View> object (all platforms) or integer index (iPhone, iPad only) of
-            a page to remove.
+            A <Titanium.UI.View> object (all platforms) or integer index (Android and iOS only) of
+            the page to remove.
         type: [Number, Titanium.UI.View]
 
   - name: scrollToView
@@ -184,8 +187,8 @@ events:
   - name: scroll
     summary: Fired repeatedly as the view is being scrolled.
     description: |
-        Prior to 2.1, the scroll event did not fire consistently on all platforms. On iOS and Mobile
-        Web, it fired when scrolling ended, and on Android, it fired when drag ended. You can restore
+        Prior to 2.1, the scroll event did not fire consistently on all platforms. On iOS,
+        it fired when scrolling ended, and on Android, it fired when drag ended. You can restore
         the pre-2.1 behavior by listening for the `scrollEnd` or `dragEnd` events instead.
     properties:
 
@@ -200,38 +203,6 @@ events:
            example, if the user is holding the `ScrollableView` in between
            the first and second page, this will have a value of 0.5.
 
-      - name: view
-        summary: The currently visible view.
-        type: Titanium.UI.View
-
-  - name: scrollEnd
-    deprecated:
-        since: "3.0.0"
-        notes: Use <Titanium.UI.ScrollableView.scrollend> instead.
-    summary: Fired when the view has stopped moving completely.
-    platforms: [iphone, ipad, android]
-    since: "2.1.0"
-
-    properties:
-      - name: currentPage
-        summary: Index of the currently visible view of <Titanium.UI.ScrollableView.views>.
-        type: Number
-
-      - name: view
-        summary: The currently visible view.
-        type: Titanium.UI.View
-
-  - name: dragEnd
-    deprecated:
-        since: "3.0.0"
-        notes: Use <Titanium.UI.ScrollableView.dragend> instead.
-    summary: Fired when the scrolling drag gesture on the view has been completed.
-    platforms: [android]
-    since: "2.1.0"
-    properties:
-      - name: currentPage
-        summary: Index of the currently visible view of <Titanium.UI.ScrollableView.views>.
-        type: Number
       - name: view
         summary: The currently visible view.
         type: Titanium.UI.View
@@ -283,7 +254,7 @@ properties:
     summary: Color for the current page of the paging control, as a color name or hex triplet.
     description: |
         For information about color values, see the "Colors" section of <Titanium.UI>.
-    type: String
+    type: [String, Titanium.UI.Color]
     default: undefined (system-default white)
     platforms: [iphone, ipad]
     since: "5.4.0"
@@ -306,8 +277,8 @@ properties:
     summary: Color of the paging control, as a color name or hex triplet.
     description: |
         For information about color values, see the "Colors" section of <Titanium.UI>.
-    type: String
-    default: black
+    type: [String, Titanium.UI.Color]
+    default: "black"
     platforms: [iphone,ipad]
 
   - name: pagingControlHeight
@@ -320,7 +291,7 @@ properties:
     summary: Color of the paging control, as a color name or hex triplet.
     description: |
         For information about color values, see the "Colors" section of <Titanium.UI>.
-    type: String
+    type: [String, Titanium.UI.Color]
     default: undefined (system-default gray)
     platforms: [iphone, ipad]
     since: "5.4.0"
@@ -389,7 +360,8 @@ properties:
     type: Boolean
     availability: creation
     default: true
-    platforms: [iphone, ipad]
+    since: { iphone: 0.9, ipad: 0.9, android: 7.5.0 }
+    platforms: [iphone, ipad, android]
 
   - name: hitRect
     summary: Sets the region where this view responds to gestures.
@@ -404,70 +376,117 @@ properties:
     platforms: [iphone, ipad]
     since: "2.1"
 
+  - name: padding
+    summary: The padding applied to the scrollable view.
+    platforms: [android]
+    type: Padding
+    since: "7.5.0"
+
 examples:
   - title: Simple Scrollable View with 3 Views
     example: |
         Create three views and assign them as pages to a scrollable view.
 
-            var win = Ti.UI.createWindow();
+        ``` js
+        var win = Ti.UI.createWindow();
 
-            var view1 = Ti.UI.createView({ backgroundColor:'#123' });
-            var view2 = Ti.UI.createView({ backgroundColor:'#246' });
-            var view3 = Ti.UI.createView({ backgroundColor:'#48b' });
+        var view1 = Ti.UI.createView({ backgroundColor:'#123' });
+        var view2 = Ti.UI.createView({ backgroundColor:'#246' });
+        var view3 = Ti.UI.createView({ backgroundColor:'#48b' });
 
-            var scrollableView = Ti.UI.createScrollableView({
-              views:[view1,view2,view3],
-              showPagingControl:true
-            });
+        var scrollableView = Ti.UI.createScrollableView({
+          views:[view1,view2,view3],
+          showPagingControl:true
+        });
 
-            win.add(scrollableView);
-            win.open();
+        win.add(scrollableView);
+        win.open();
+        ```
 
   - title: Simple Scrollable View with 2 Zoomable Images
     example: |
         Create two scroll views, each containing an image view, and assign them as pages to a
         scrollable view.
 
-            var img1 = Ti.UI.createImageView({
-                image:'http://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/' +
-                'Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/' +
-                '402px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg'
-            });
-            var img1Wrapper = Ti.UI.createScrollView({
-                maxZoomScale:4.0,
-            });
-            img1Wrapper.add(img1);
+        ``` js
+        var img1 = Ti.UI.createImageView({
+            image:'http://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/' +
+            'Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/' +
+            '402px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg'
+        });
+        var img1Wrapper = Ti.UI.createScrollView({
+            maxZoomScale:4.0,
+        });
+        img1Wrapper.add(img1);
 
-            var img2 = Ti.UI.createImageView({
-                image:'http://www.nasa.gov/images/content/' +
-                '616903main_rover_comparison1600_1600-1200.jpg'
-            });
-            var img2Wrapper = Ti.UI.createScrollView({
-                maxZoomScale:4.0,
-            });
-            img2Wrapper.add(img2);
-            var photosView = Ti.UI.createScrollableView({
-                showPagingControl:true,
-                views:[img1Wrapper, img2Wrapper]
-            });
-            win.add(photosView);
+        var img2 = Ti.UI.createImageView({
+            image:'http://www.nasa.gov/images/content/' +
+            '616903main_rover_comparison1600_1600-1200.jpg'
+        });
+        var img2Wrapper = Ti.UI.createScrollView({
+            maxZoomScale:4.0,
+        });
+        img2Wrapper.add(img2);
+        var photosView = Ti.UI.createScrollableView({
+            showPagingControl:true,
+            views:[img1Wrapper, img2Wrapper]
+        });
+        win.add(photosView);
+        ```
+
+  - title: Scrollable View with multiple visible views
+    example: |
+      Create three views and assign them as pages to a scrollable view. Each page is narrower than
+      a scrollable view, so multiple views are visible at the same time.
+
+      ``` js
+      var win = Ti.UI.createWindow();
+
+      var view1 = Ti.UI.createView({ backgroundColor:'#123' });
+      var view2 = Ti.UI.createView({ backgroundColor:'#246' });
+      var view3 = Ti.UI.createView({ backgroundColor:'#48b' });
+
+      // Common params
+      var params = {
+        views:[view1,view2,view3],
+        clipViews:false,
+        showPagingControl:false,
+        top: 0
+      };
+
+      if (Ti.Platform.name === 'android') {
+        // Android specific params
+        params.padding = {
+          left:40,
+          right:40
+        };
+      } else {
+        // iOS specific params
+        params.width = '90%';
+      }
+
+      win.add(scrollableView);
+      win.open();
+      ```
 
   - title: Alloy XML Markup
     example: |
-       First example as an Alloy view.
+        First example as an Alloy view.
 
-           <Alloy>
-               <Window id="win">
-                   <ScrollableView id="scrollableView" showPagingControl="true">
-                       <View id="view1" backgroundColor="#123">
-                          <Label>View 1</Label>
-                       </View>
-                       <View id="view2" backgroundColor="#246">
-                        <Label>View 2</Label>
-                        </View>
-                       <View id="view3" backgroundColor="#48b">
-                        <Label>View 3</Label>
-                        </View>
-                   </ScrollableView>
-               </Window>
-            </Alloy>
+        ``` xml
+        <Alloy>
+            <Window id="win">
+                <ScrollableView id="scrollableView" showPagingControl="true">
+                    <View id="view1" backgroundColor="#123">
+                      <Label>View 1</Label>
+                    </View>
+                    <View id="view2" backgroundColor="#246">
+                    <Label>View 2</Label>
+                    </View>
+                    <View id="view3" backgroundColor="#48b">
+                    <Label>View 3</Label>
+                    </View>
+                </ScrollableView>
+            </Window>
+        </Alloy>
+        ```

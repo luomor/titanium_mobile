@@ -5,297 +5,366 @@
  * Please see the LICENSE included with this distribution for details.
  */
 /* eslint-env mocha */
-/* global Ti */
 /* eslint no-unused-expressions: "off" */
 'use strict';
-var should = require('./utilities/assertions'),
-	utilities = require('./utilities/utilities');
+const should = require('./utilities/assertions');
+const utilities = require('./utilities/utilities');
+
+const isAndroid = utilities.isAndroid();
 
 describe('Titanium.UI.View', function () {
-	var win,
-		didFocus = false,
-		didPostLayout = false;
+	let rootWindow;
+	let win;
 
-	this.timeout(5000);
+	this.slow(2000);
+	this.timeout(10000);
 
 	before(function (finish) {
 		rootWindow = Ti.UI.createWindow();
-		rootWindow.addEventListener('open', function () {
-			finish();
-		});
+		rootWindow.addEventListener('open', () => finish());
 		rootWindow.open();
 	});
 
 	after(function (finish) {
-		rootWindow.addEventListener('close', function () {
-			finish();
-		});
+		rootWindow.addEventListener('close', () => finish());
 		rootWindow.close();
 	});
 
-	beforeEach(function () {
-		didFocus = false;
-		didPostLayout = false;
-	});
-
-	afterEach(function () {
-		if (win) {
+	afterEach(done => { // fires after every test in sub-suites too...
+		if (win && !win.closed) {
+			win.addEventListener('close', function listener () {
+				win.removeEventListener('close', listener);
+				win = null;
+				done();
+			});
 			win.close();
+		} else {
+			win = null;
+			done();
 		}
-		win = null;
 	});
 
-	it('backgroundColor/Image', function (finish) {
-		var view;
-		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
-		view = Ti.UI.createView({ width:Ti.UI.FILL, height:Ti.UI.FILL });
-		win.add(view);
-		win.addEventListener('focus', function () {
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
+	it('backgroundColor/Image', function () {
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
 
-			try {
-				view.backgroundColor = 'white';
-				view.backgroundImage = 'Logo.png';
-				should(view.backgroundColor).be.a.String;
-				should(view.backgroundImage).be.a.String;
-				should(view.backgroundColor).be.eql('white');
-				should(view.backgroundImage).be.eql('Logo.png');
-
-				finish();
-			} catch (err) {
-				finish(err);
-			}
-		});
-		win.open();
+		view.backgroundColor = 'white';
+		view.backgroundImage = 'Logo.png';
+		should(view.backgroundColor).be.a.String();
+		should(view.backgroundImage).be.a.String();
+		should(view.backgroundColor).be.eql('white');
+		should(view.backgroundImage).be.eql('Logo.png');
 	});
 
 	// FIXME Get working on iOS and Android
-	(((utilities.isWindows8_1() && utilities.isWindowsDesktop()) || utilities.isIOS() || utilities.isAndroid()) ? it.skip : it)('backgroundFocusedColor/Image', function (finish) {
-		var view;
+	it.androidAndIosBroken('backgroundFocusedColor/Image', function (finish) {
 		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
-		view = Ti.UI.createView({ width:Ti.UI.FILL, height:Ti.UI.FILL });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
 		win.add(view);
 		win.addEventListener('focus', function () {
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
-				should(view.backgroundFocusedColor).be.a.String; // undefined on iOS and Android
-				should(view.backgroundFocusedImage).be.a.String;
+				should(view.backgroundFocusedColor).be.a.String(); // undefined on iOS and Android
+				should(view.backgroundFocusedImage).be.a.String();
 				view.backgroundFocusedColor = 'white';
 				view.backgroundFocusedImage = 'Logo.png';
 				should(view.backgroundFocusedColor).be.eql('white');
 				should(view.backgroundFocusedImage).be.eql('Logo.png');
-
-				finish();
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 		win.open();
 	});
 
 	// FIXME Get working on iOS
-	(((utilities.isWindows8_1() && utilities.isWindowsDesktop()) || utilities.isIOS() || utilities.isAndroid()) ? it.skip : it)('backgroundSelectedColor/Image', function (finish) {
-		var view;
+	it.androidAndIosBroken('backgroundSelectedColor/Image', function (finish) {
 		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
-		view = Ti.UI.createView({ width:Ti.UI.FILL, height:Ti.UI.FILL });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
 		win.add(view);
 		win.addEventListener('focus', function () {
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
-				should(view.backgroundSelectedColor).be.a.String; // undefined on iOS and Android
-				should(view.backgroundSelectedImage).be.a.String;
+				should(view.backgroundSelectedColor).be.a.String(); // undefined on iOS and Android
+				should(view.backgroundSelectedImage).be.a.String();
 				view.backgroundSelectedColor = 'white';
 				view.backgroundSelectedImage = 'Logo.png';
 				should(view.backgroundSelectedColor).be.eql('white');
 				should(view.backgroundSelectedImage).be.eql('Logo.png');
-
-				finish();
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 		win.open();
 	});
 
 	// FIXME Get working on iOS and Android
-	(((utilities.isWindows8_1() && utilities.isWindowsDesktop()) || utilities.isIOS() || utilities.isAndroid()) ? it.skip : it)('backgroundDisabledColor/Image', function (finish) {
-		var view;
+	it.androidAndIosBroken('backgroundDisabledColor/Image', function (finish) {
 		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
-		view = Ti.UI.createView({ width:Ti.UI.FILL, height:Ti.UI.FILL });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
 		win.add(view);
 		win.addEventListener('focus', function () {
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
-				should(view.backgroundDisabledColor).be.a.String; // undefined on iOS and Android
-				should(view.backgroundDisabledImage).be.a.String;
+				should(view.backgroundDisabledColor).be.a.String(); // undefined on iOS and Android
+				should(view.backgroundDisabledImage).be.a.String();
 				view.backgroundDisabledColor = 'white';
 				view.backgroundDisabledImage = 'Logo.png';
 				should(view.backgroundDisabledColor).be.eql('white');
 				should(view.backgroundDisabledImage).be.eql('Logo.png');
-
-				finish();
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 		win.open();
 	});
 
-	// FIXME Get working on iOS
-	it.iosBroken('backgroundGradient', function (finish) {
-		var view;
+	// Windows supports linear gradient only
+	it.androidAndWindowsMissing('backgroundGradient (radial)', function (finish) {
 		this.timeout(10000);
 
-		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
-		view = Ti.UI.createView({ width:Ti.UI.FILL, height:Ti.UI.FILL });
-		view.backgroundGradient = {
-			type: 'linear',
-			startPoint: { x: '0%', y: '50%' },
-			endPoint: { x: '100%', y: '100%' },
-			colors: [ { color: 'red', offset: 0.0 }, { color: 'blue', offset: 0.25 }, { color: 'red', offset: 1.0 } ],
+		win = Ti.UI.createWindow({
+			backgroundColor: '#fff'
+		});
+
+		const gradient = {
+			type: 'radial',
+			startPoint: {
+				x: 50,
+				y: 50
+			},
+			colors: [ 'red', 'blue' ],
+			startRadius: '90%',
+			endRadius: 0
 		};
-		win.add(view);
-		win.addEventListener('focus', function () {
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
 
+		// iOS/Windows-only properties
+		if (!utilities.isAndroid()) {
+			gradient.endPoint = {
+				x: 50,
+				y: 50
+			};
+			gradient.backfillStart = true;
+			gradient.backfillEnd = true;
+		}
+
+		const radialGradient = Ti.UI.createView({
+			width: 100,
+			height: 100,
+			backgroundGradient: gradient
+		});
+
+		win.addEventListener('open', function () {
 			try {
-				should(view.backgroundGradient.type).be.eql('linear');
-				should(view.backgroundGradient.startPoint).be.an.Object;
-				should(view.backgroundGradient.endPoint).be.an.Object;
-				should(view.backgroundGradient.colors).be.an.Array; // undefined on iOS
+				// general API
+				should(radialGradient.backgroundGradient).be.an.Object();
 
-				finish();
+				// type
+				should(radialGradient.backgroundGradient.type).be.a.String();
+				should(radialGradient.backgroundGradient.type).eql('radial');
+
+				// startPoint
+				should(radialGradient.backgroundGradient.startPoint).be.an.Object();
+				should(radialGradient.backgroundGradient.startPoint.x).be.a.Number();
+				should(radialGradient.backgroundGradient.startPoint.y).be.a.Number();
+				should(radialGradient.backgroundGradient.startPoint.x).eql(50);
+				should(radialGradient.backgroundGradient.startPoint.y).eql(50);
+
+				// colors
+				should(radialGradient.backgroundGradient.colors).be.an.Array();
+				should(radialGradient.backgroundGradient.colors[0]).eql('red');
+				should(radialGradient.backgroundGradient.colors[1]).eql('blue');
+
+				// startRadius
+				should(radialGradient.backgroundGradient.startRadius).eql('90%');
+
+				// endRadius
+				should(radialGradient.backgroundGradient.endRadius).eql(0);
+
+				// TODO: Expose those on Android as well
+				if (!isAndroid) {
+					// endPoint
+					should(radialGradient.backgroundGradient.endPoint).be.an.Object();
+					should(radialGradient.backgroundGradient.endPoint.x).be.a.Number();
+					should(radialGradient.backgroundGradient.endPoint.y).be.a.Number();
+					should(radialGradient.backgroundGradient.endPoint.x).eql(50);
+					should(radialGradient.backgroundGradient.endPoint.y).eql(50);
+
+					// backfillStart
+					should(radialGradient.backgroundGradient.backfillStart).be.a.Boolean();
+					should(radialGradient.backgroundGradient.backfillStart).eql(true);
+
+					// backfillEnd
+					should(radialGradient.backgroundGradient.backfillEnd).be.a.Boolean();
+					should(radialGradient.backgroundGradient.backfillEnd).eql(true);
+				}
 			} catch (err) {
-				finish(err);
+				return finish(err);
+			}
+
+			finish();
+		});
+
+		win.add(radialGradient);
+		win.open();
+	});
+
+	// FIXME Windows throws exception
+	it.windowsBroken('backgroundGradient (linear)', function (finish) {
+		this.timeout(10000);
+
+		win = Ti.UI.createWindow({
+			backgroundColor: '#fff'
+		});
+
+		const linearGradient = Ti.UI.createView({
+			width: 100,
+			height: 100,
+			backgroundGradient: {
+				type: 'linear',
+				startPoint: {
+					x: '0%',
+					y: '50%'
+				},
+				endPoint: {
+					x: '100%',
+					y: '100%'
+				},
+				colors: [ {
+					color: 'red',
+					offset: 0.0
+				}, {
+					color: 'blue',
+					offset: 0.25
+				}, {
+					color: 'red',
+					offset: 1.0
+				} ],
 			}
 		});
+
+		win.addEventListener('open', function () {
+			try {
+				// general API
+				should(linearGradient.backgroundGradient).be.an.Object();
+
+				// type
+				should(linearGradient.backgroundGradient.type).be.a.String();
+				should(linearGradient.backgroundGradient.type).eql('linear');
+
+				// startPoint
+				should(linearGradient.backgroundGradient.startPoint).be.an.Object();
+				should(linearGradient.backgroundGradient.startPoint.x).be.a.String();
+				should(linearGradient.backgroundGradient.startPoint.y).be.a.String();
+				should(linearGradient.backgroundGradient.startPoint.x).eql('0%');
+				should(linearGradient.backgroundGradient.startPoint.y).eql('50%');
+
+				// endPoint
+				should(linearGradient.backgroundGradient.endPoint).be.an.Object();
+				should(linearGradient.backgroundGradient.endPoint.x).be.a.String();
+				should(linearGradient.backgroundGradient.endPoint.y).be.a.String();
+				should(linearGradient.backgroundGradient.endPoint.x).eql('100%');
+				should(linearGradient.backgroundGradient.endPoint.y).eql('100%');
+
+				// colors
+				should(linearGradient.backgroundGradient.colors).be.an.Array();
+				linearGradient.backgroundGradient.colors.forEach(colorObject => {
+					should(colorObject).be.an.Object();
+					should(colorObject.color).be.a.String();
+					should(colorObject.offset).be.a.Number();
+				});
+			} catch (err) {
+				return finish(err);
+			}
+
+			finish();
+		});
+
+		win.add(linearGradient);
 		win.open();
 	});
 
 	// FIXME Get working on iOS and Android
 	it.allBroken('border', function (finish) {
-		var view;
 		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
-		view = Ti.UI.createView({ width:Ti.UI.FILL, height:Ti.UI.FILL });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
 		win.add(view);
 		win.addEventListener('focus', function () {
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
-				should(view.borderColor).be.a.String; // undefined on iOS and Android
-				should(view.borderWidth).be.a.Number; // Windows gives: expected '0' to be a number
+				should(view.borderColor).be.a.String(); // undefined on iOS and Android
+				should(view.borderWidth).be.a.Number(); // Windows gives: expected '0' to be a number
 				view.borderColor = 'blue';
 				view.borderWidth = 2;
 				should(view.borderColor).be.eql('blue');
 				should(view.borderWidth).be.eql(2);
-
-				finish();
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 		win.open();
 	});
 
-	// FIXME fails on Android because Ti.UI.View doesn't fire postlayout
 	// FIXME Times out on iOS. Never fires postlayout?
-	(((utilities.isWindows8_1() && utilities.isWindowsDesktop()) || utilities.isAndroid() || utilities.isIOS()) ? it.skip : it)('rect and size', function (finish) {
-		var view;
+	it('rect and size', function (finish) {
 		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
-		view = Ti.UI.createView({ width:Ti.UI.FILL, height:Ti.UI.FILL });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
 		win.add(view);
 
-		view.addEventListener('postlayout', function () {
-			if (didPostLayout) {
-				return;
-			}
-			didPostLayout = true;
+		view.addEventListener('postlayout', function listener () {
+			view.removeEventListener('postlayout', listener);
 
 			try {
 				Ti.API.info('Got postlayout event');
 				Ti.API.info(JSON.stringify(view.rect));
 				Ti.API.info(JSON.stringify(view.size));
-				should(view.rect).be.an.Object;
+				should(view.rect).be.an.Object();
 				should(view.rect.width).be.above(0);
 				should(view.rect.height).be.above(0);
-				should(view.rect.x).be.a.Number;
-				should(view.rect.y).be.a.Number;
+				should(view.rect.x).be.a.Number();
+				should(view.rect.y).be.a.Number();
 				should(view.size.width).be.above(0);
 				should(view.size.height).be.above(0);
-
-				finish();
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 		win.open();
 	});
 
 	// FIXME Get working on iOS! After #hide() call, visible still returns true)
-	(((utilities.isWindows8_1() && utilities.isWindowsDesktop()) || utilities.isIOS()) ? it.skip : it)('hide() and show() change visible property value', function (finish) {
-		this.slow(2000);
-		this.timeout(7500);
-
+	it.iosBroken('hide() and show() change visible property value', function (finish) {
 		win = Ti.UI.createWindow({
 			backgroundColor: 'blue'
 		});
 
 		win.addEventListener('focus', function () {
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
 				Ti.API.info('Got focus event');
-				should(win.visible).be.true;
+				should(win.visible).be.true();
 				win.hide();
-				should(win.visible).be.false; // iOS returns true
+				should(win.visible).be.false(); // iOS returns true
 				win.show();
-				should(win.visible).be.true;
-
-				finish();
+				should(win.visible).be.true();
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 		win.open();
 	});
 
 	// FIXME: Windows 10 Store app fails for this...need to figure out why.
-	// FIXME Android reports view.rect.y to be 100, others report 150
-	(((utilities.isWindows10() && utilities.isWindowsDesktop()) || utilities.isAndroid()) ? it.skip : it)('animate (top)', function (finish) {
-		var view;
+	it.windowsBroken('animate (top)', function (finish) {
 		win = Ti.UI.createWindow();
-		view = Ti.UI.createView({
-			backgroundColor:'red',
+		const view = Ti.UI.createView({
+			backgroundColor: 'red',
 			width: 100, height: 100,
 			left: 100,  top: 100
 		});
 
 		win.addEventListener('open', function () {
-			var animation = Ti.UI.createAnimation({
+			const animation = Ti.UI.createAnimation({
 				top: 150,
 				duration: 1000,
 			});
@@ -304,16 +373,52 @@ describe('Titanium.UI.View', function () {
 				// make sure to give it a time to layout
 				setTimeout(function () {
 					try {
+						should(view.rect.x).be.eql(100); // FIXME: do we need to register for a postlayout for this?
+						should(view.rect.y).be.eql(150);
+						should(view.left).be.eql(100);
+						should(view.top).be.eql(150);
+					} catch (err) {
+						return finish(err);
+					}
+					finish();
+				}, 1);
+			});
+
+			view.animate(animation);
+
+		});
+		win.add(view);
+		win.open();
+	});
+
+	it('animate (top) - autoreverse', function (finish) {
+		win = Ti.UI.createWindow();
+		const view = Ti.UI.createView({
+			backgroundColor: 'red',
+			width: 100, height: 100,
+			left: 100,  top: 100
+		});
+
+		win.addEventListener('open', function () {
+			const animation = Ti.UI.createAnimation({
+				top: 150,
+				duration: 1000,
+				autoreverse: true
+			});
+
+			animation.addEventListener('complete', function () {
+				// make sure to give it a time to layout
+				setTimeout(function () {
+					try {
 						should(view.rect.x).be.eql(100);
-						should(view.rect.y).be.eql(150); // Android reports 100
+						should(view.rect.y).be.eql(100);
 						should(view.left).be.eql(100);
 						should(view.top).be.eql(100);
-
-						finish();
 					} catch (err) {
-						finish(err);
+						return finish(err);
 					}
-				}, 500);
+					finish();
+				}, 1);
 			});
 
 			view.animate(animation);
@@ -324,18 +429,16 @@ describe('Titanium.UI.View', function () {
 	});
 
 	// FIXME: Windows 10 Store app fails for this...need to figure out why.
-	// FIXME Android reports view.rect.x to be 100, others report 150
-	(((utilities.isWindows10() && utilities.isWindowsDesktop()) || utilities.isAndroid()) ? it.skip : it)('animate (left)', function (finish) {
-		var view;
+	it.windowsBroken('animate (left)', function (finish) {
 		win = Ti.UI.createWindow();
-		view = Ti.UI.createView({
-			backgroundColor:'red',
+		const view = Ti.UI.createView({
+			backgroundColor: 'red',
 			width: 100, height: 100,
 			left: 100,  top: 100
 		});
 
 		win.addEventListener('open', function () {
-			var animation = Ti.UI.createAnimation({
+			const animation = Ti.UI.createAnimation({
 				left: 150,
 				duration: 1000,
 			});
@@ -345,16 +448,15 @@ describe('Titanium.UI.View', function () {
 				setTimeout(function () {
 
 					try {
-						should(view.rect.x).be.eql(150); // Android reports 100
+						should(view.rect.x).be.eql(150);
 						should(view.rect.y).be.eql(100);
-						should(view.left).be.eql(100);
+						should(view.left).be.eql(150);
 						should(view.top).be.eql(100);
-
-						finish();
 					} catch (err) {
-						finish(err);
+						return finish(err);
 					}
-				}, 500);
+					finish();
+				}, 1);
 			});
 
 			view.animate(animation);
@@ -364,16 +466,14 @@ describe('Titanium.UI.View', function () {
 		win.open();
 	});
 
-	// FIXME: Android view.rect.y is not the same as view.top
 	// FIXME: iOS fails with 'New layout set while view [object TiUIView] animating'
 	// FIXME: Windows fails with timeout
 	it.allBroken('TIMOB-20598', function (finish) {
-		var view,
-			left = 150,
-			count = 0;
-		this.timeout(10000);
-		view = Ti.UI.createView({
-			backgroundColor:'red',
+		let left = 150;
+		let count = 0;
+
+		const view = Ti.UI.createView({
+			backgroundColor: 'red',
 			width: 100, height: 100,
 			left: 100,  top: 100
 		});
@@ -381,7 +481,7 @@ describe('Titanium.UI.View', function () {
 		win = Ti.UI.createWindow();
 
 		function start() {
-			var animation = Ti.UI.createAnimation({
+			const animation = Ti.UI.createAnimation({
 				left: left,
 				duration: 1000
 			});
@@ -410,26 +510,22 @@ describe('Titanium.UI.View', function () {
 			view.animate(animation);
 		}
 
-		win.addEventListener('open', function () {
-			start();
-		});
+		win.addEventListener('open', () => start());
 
 		win.add(view);
 		win.open();
 	});
 
 	// FIXME: Windows 10 Store app fails for this...need to figure out why.
-	// FIXME Android reports 90% for one of comparisons to 0 (view.left?)
-	(((utilities.isWindows10() && utilities.isWindowsDesktop()) || utilities.isAndroid()) ? it.skip : it)('animate (left %)', function (finish) {
-		var view;
+	it.windowsBroken('animate (left %)', function (finish) {
 		win = Ti.UI.createWindow();
-		view = Ti.UI.createView({
+		const view = Ti.UI.createView({
 			backgroundColor: 'red',
 			width: '10%', height: '10%',
 			left: 0, top: 0
 		});
 		win.addEventListener('open', function () {
-			var animation = Ti.UI.createAnimation({
+			const animation = Ti.UI.createAnimation({
 				left: '90%',
 				duration: 1000
 			});
@@ -439,14 +535,14 @@ describe('Titanium.UI.View', function () {
 					try {
 						should(view.rect.x).be.approximately(view.rect.width * 9, 10);
 						should(view.rect.y).be.eql(0);
-						should(view.left).be.eql(0);
+						should(view.left).be.eql('90%');
 						should(view.top).be.eql(0);
-
-						finish();
 					} catch (err) {
-						finish(err);
+						return finish(err);
 					}
-				}, 500);
+
+					finish();
+				}, 1);
 			});
 			view.animate(animation);
 		});
@@ -455,11 +551,9 @@ describe('Titanium.UI.View', function () {
 	});
 
 	// FIXME: Windows 10 Store app fails for this...need to figure out why.
-	// FIXME Android reports 90% for one of comparisons to 0 (view.top?)
-	(((utilities.isWindows10() && utilities.isWindowsDesktop()) || utilities.isAndroid()) ? it.skip : it)('animate (top %)', function (finish) {
-		var view;
+	it.windowsBroken('animate (top %)', function (finish) {
 		win = Ti.UI.createWindow();
-		view = Ti.UI.createView({
+		const view = Ti.UI.createView({
 			backgroundColor: 'red',
 			width: '10%', height: '10%',
 			left: 0, top: 0
@@ -476,13 +570,12 @@ describe('Titanium.UI.View', function () {
 						should(view.rect.x).be.eql(0);
 						should(view.rect.y).be.approximately(view.rect.height * 9, 10);
 						should(view.left).be.eql(0);
-						should(view.top).be.eql(0);
-
-						finish();
+						should(view.top).be.eql('90%');
 					} catch (err) {
-						finish(err);
+						return finish(err);
 					}
-				}, 500);
+					finish();
+				}, 1);
 			});
 			view.animate(animation);
 		});
@@ -491,8 +584,7 @@ describe('Titanium.UI.View', function () {
 	});
 
 	// FIXME: Windows 10 Store app fails for this...need to figure out why.
-	// FIXME Android reports 90% for one of comparisons to 10% (view.width?)
-	it.androidAndWindowsBroken('animate (width %)', function (finish) {
+	it.windowsBroken('animate (width %)', function (finish) {
 		var view;
 		win = Ti.UI.createWindow();
 		view = Ti.UI.createView({
@@ -509,17 +601,16 @@ describe('Titanium.UI.View', function () {
 				// make sure to give it a time to layout
 				setTimeout(function () {
 					try {
-						should(view.width).be.eql('10%');
+						should(view.width).be.eql('90%');
 						should(view.height).be.eql('10%');
-						should(view.rect.width).be.approximately(view.rect.x * 9, 10); // Windows Phone gives: expected 32 to be approximately 288 ±10
 						should(view.left).be.eql('10%');
 						should(view.top).be.eql(0);
-
-						finish();
+						should(view.rect.width).be.approximately(view.rect.x * 9, 10); // Windows Phone gives: expected 32 to be approximately 288 ±10
 					} catch (err) {
-						finish(err);
+						return finish(err);
 					}
-				}, 500);
+					finish();
+				}, 1);
 			});
 			view.animate(animation);
 		});
@@ -528,8 +619,7 @@ describe('Titanium.UI.View', function () {
 	});
 
 	// FIXME: Windows 10 Store app fails for this...need to figure out why.
-	// FIXME Android reports 90% for one of comparisons to 10% (view.height?)
-	it.androidAndWindowsBroken('animate (height %)', function (finish) {
+	it.windowsBroken('animate (height %)', function (finish) {
 		var view;
 		win = Ti.UI.createWindow();
 		view = Ti.UI.createView({
@@ -547,16 +637,15 @@ describe('Titanium.UI.View', function () {
 				setTimeout(function () {
 					try {
 						should(view.width).be.eql('10%');
-						should(view.height).be.eql('10%');
-						should(view.rect.height).be.approximately(view.rect.y * 9, 10); // Windows Phone: expected 53 to be approximately 477 ±10
+						should(view.height).be.eql('90%');
 						should(view.left).be.eql(0);
 						should(view.top).be.eql('10%');
-
-						finish();
+						should(view.rect.height).be.approximately(view.rect.y * 9, 10); // Windows Phone: expected 53 to be approximately 477 ±10
 					} catch (err) {
-						finish(err);
+						return finish(err);
 					}
-				}, 500);
+					finish();
+				}, 1);
 			});
 			view.animate(animation);
 		});
@@ -564,64 +653,59 @@ describe('Titanium.UI.View', function () {
 		win.open();
 	});
 
-	// FIXME Android reports 223 for one of the values we expect 123 (result.y?)
+	// FIXME: I think there's a parity issue here!
+	// Android returns x/y values as pixels *always*. while the input '100' uses the default unit (dip)
+	// which may vary based on screen density (Ti.Platform.DisplayCaps.ydpi) - so may be 100 or 200 pixels!
+	// But iOS *always* returns 123 for our value, so it must report the convertPointToView results in the default units too!
+	// So I think iOS always reports back dip values here and Android always reports back pixels
 	it.androidAndWindowsBroken('convertPointToView', function (finish) {
-		var a,
-			b;
 		win = Ti.UI.createWindow();
-		a = Ti.UI.createView({ backgroundColor:'red' });
-		b = Ti.UI.createView({ top: '100', backgroundColor: 'blue' });
+		const a = Ti.UI.createView({ backgroundColor: 'red' });
+		const b = Ti.UI.createView({ top: '100', backgroundColor: 'blue' });
 
 		a.add(b);
 		win.add(a);
 
-		b.addEventListener('postlayout', function () {
-			var result;
-			if (didPostLayout) {
-				return;
-			}
-			didPostLayout = true;
+		b.addEventListener('postlayout', function listener () {
+			b.removeEventListener('postlayout', listener);
 
 			try {
 				Ti.API.info('Got postlayout event');
-				result = b.convertPointToView({ x: 123, y: 23 }, a);
-				should(result).be.an.Object;
-				should(result.x).be.a.Number; // Windows: expected '123.000000' to be a number
-				should(result.y).be.a.Number;
+				let result = b.convertPointToView({ x: 123, y: 23 }, a);
+				should(result).be.an.Object();
+				should(result.x).be.a.Number(); // Windows: expected '123.000000' to be a number
+				should(result.y).be.a.Number();
 				should(result.x).eql(123);
-				should(result.y).eql(123);
-
-				finish();
+				should(result.y).eql(123); // Android sometimes gives 223? I assume this is a screen density thing?
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 		win.open();
 	});
 
 	// FIXME one of the getters or setter for parent isn't there on Android. I can't find the property or accessors in our docs!
-	(utilities.isAndroid() ? it.skip : it)('parent', function (finish) {
-		var view;
+	it.androidMissing('parent', function (finish) {
 		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
-		view = Ti.UI.createView({ width:Ti.UI.FILL, height:Ti.UI.FILL });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
 		win.add(view);
 
 		win.addEventListener('open', function () {
 			try {
-				should(view.parent).be.an.Object;
+				should(view.parent).be.an.Object();
 				should(view.parent).eql(win);
-				should(view.getParent).be.a.Function;
-				should(view.setParent).be.a.Function;
+				should(view.getParent).be.a.Function();
+				should(view.setParent).be.a.Function();
 				should(view.getParent()).eql(win);
 
 				// parent is not read-only
 				view.setParent(null);
-				should(view.parent).not.exist;
-
-				finish();
+				should.not.exist(view.parent);
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 
 		win.open();
@@ -631,11 +715,15 @@ describe('Titanium.UI.View', function () {
 	// FIXME: iOS updates borderWidth internally but doesn't expose the updated value to JS!
 	// FIXME: Docs say borderWidth is a Number, but Android returns a string!
 	it.iosAndWindowsBroken('border with only borderColor set', function (finish) {
-		var view = Ti.UI.createView({ width: 200, height: 200, borderColor: 'red', backgroundColor: 'white' });
+		const view = Ti.UI.createView({ width: 200, height: 200, borderColor: 'red', backgroundColor: 'white' });
 		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
 		win.add(view);
 		win.addEventListener('open', function () {
-			should(view.borderWidth).eql('1'); // undefined on ios, despite it actually setting borderWidth under the hood to min 1
+			try {
+				should(view.borderWidth).eql('1'); // undefined on ios, despite it actually setting borderWidth under the hood to min 1
+			} catch (err) {
+				return finish(err);
+			}
 			finish();
 		});
 		win.open();
@@ -643,22 +731,16 @@ describe('Titanium.UI.View', function () {
 
 	// these properties should be present with all events
 	// for this automated test we will be using 'focus'
-	it('event source and bubbles property', function (finish) {
+	it.windowsMissing('event source and bubbles property', function (finish) {
 		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
 		win.addEventListener('focus', function (e) {
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
-				should(e.source).be.a.Object;
-				should(e.bubbles).be.a.Boolean;
-
-				finish();
+				should(e.source).be.a.Object();
+				should(e.bubbles).be.a.Boolean();
 			} catch (err) {
-				finish(err);
+				return finish(err);
 			}
+			finish();
 		});
 		win.open();
 	});
@@ -666,19 +748,19 @@ describe('Titanium.UI.View', function () {
 	// TIMOB-25656: Android specific issue where getOrCreateView() could return null
 	it.android('getOrCreateView() should always return a View', function (finish) {
 		win = Ti.UI.createWindow();
-		
-		win.addEventListener('open', function (e) {
 
-			var child = Ti.UI.createWindow();
-			
-			child.addEventListener('open', function (e) {
-				var imageView = Ti.UI.createImageView();
+		win.addEventListener('open', function () {
 
-				child.addEventListener('close', function (e) {
+			const child = Ti.UI.createWindow();
+
+			child.addEventListener('open', function () {
+				const imageView = Ti.UI.createImageView();
+
+				child.addEventListener('close', function () {
 					try {
 						imageView.tintColor;
 					} catch (error) {
-						finish(error);
+						return finish(error);
 					}
 					finish();
 				});
@@ -688,6 +770,394 @@ describe('Titanium.UI.View', function () {
 			child.open();
 		});
 
+		win.open();
+	});
+
+	it.ios('.horizontalMotionEffect, .verticalMotionEffect', function (finish) {
+		win = Ti.UI.createWindow({
+			backgroundColor: 'blue'
+		});
+
+		const view = Ti.UI.createView({
+			horizontalMotionEffect: {
+				min: -50,
+				max: 50
+			},
+			verticalMotionEffect: {
+				min: -50,
+				max: 50
+			}
+		});
+
+		win.addEventListener('open', function () {
+			try {
+				// horizontalMotionEffect
+				should(view.horizontalMotionEffect).be.an.Object();
+				should(view.horizontalMotionEffect.min).be.a.Number();
+				should(view.horizontalMotionEffect.max).be.a.Number();
+
+				// verticalMotionEffect
+				should(view.verticalMotionEffect).be.an.Object();
+				should(view.verticalMotionEffect.min).be.a.Number();
+				should(view.verticalMotionEffect.max).be.a.Number();
+			} catch (err) {
+				return finish(err);
+			}
+
+			finish();
+		});
+
+		win.add(view);
+		win.open();
+	});
+
+	it('.backgroundImage (URL-redirect)', function (finish) {
+		this.slow(8000);
+		this.timeout(10000);
+
+		win = Ti.UI.createWindow();
+		win.add(Ti.UI.createView({
+			backgroundImage: 'http://raw.githubusercontent.com/recurser/exif-orientation-examples/master/Portrait_1.jpg'
+		}));
+		win.addEventListener('open', () => finish());
+		win.open();
+	});
+
+	// FIXME Get working on iOS
+	it.android('backgroundDisabledColor', function (finish) {
+		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
+		win.add(view);
+		win.addEventListener('focus', function () {
+			try {
+				view.backgroundDisabledColor = '#88FFFFFF';
+				should(view.backgroundDisabledColor).be.eql('#88FFFFFF');
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
+		});
+		win.open();
+	});
+
+	it.android('backgroundColor without color state', function (finish) {
+		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+		const view = Ti.UI.createView({ backgroundColor: '#88FFFFFF', width: Ti.UI.FILL, height: Ti.UI.FILL });
+		win.add(view);
+		win.addEventListener('focus', function () {
+			try {
+				should(view.backgroundColor).be.eql('#88FFFFFF');
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
+		});
+		win.open();
+	});
+
+	it.android('backgroundColor with border', function (finish) {
+		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+		const view = Ti.UI.createView({ backgroundColor: '#88FFFFFF', borderWidth: 10, borderColor: 'green', width: Ti.UI.FILL, height: Ti.UI.FILL });
+		win.add(view);
+		win.addEventListener('focus', function () {
+			try {
+				should(view.backgroundColor).be.eql('#88FFFFFF');
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
+		});
+		win.open();
+	});
+
+	it.android('backgroundColor default with color state', function (finish) {
+		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+		const view = Ti.UI.createView({ backgroundColor: '#88FFFFFF', backgroundSelectedColor: 'cyan', width: Ti.UI.FILL, height: Ti.UI.FILL });
+		win.add(view);
+		win.addEventListener('focus', function () {
+			try {
+				should(view.backgroundColor).be.eql('#88FFFFFF');
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
+		});
+		win.open();
+	});
+
+	it.android('backgroundSelectedColor', function (finish) {
+		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
+		win.add(view);
+		win.addEventListener('focus', function () {
+			try {
+				view.backgroundSelectedColor = '#88FFFFFF';
+				should(view.backgroundSelectedColor).be.eql('#88FFFFFF');
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
+		});
+		win.open();
+	});
+
+	it.android('backgroundFocusedColor', function (finish) {
+		win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+		const view = Ti.UI.createView({ width: Ti.UI.FILL, height: Ti.UI.FILL });
+		win.add(view);
+		win.addEventListener('focus', function () {
+			try {
+				view.backgroundFocusedColor = '#88FFFFFF';
+				should(view.backgroundFocusedColor).be.eql('#88FFFFFF');
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
+		});
+		win.open();
+	});
+
+	it.ios('.accessibility* Properties', function (finish) {
+		win = Ti.UI.createWindow({
+			backgroundColor: 'blue'
+		});
+		const label = Ti.UI.createLabel({
+			text: 'Label for Test',
+			accessibilityLabel: 'Text',
+			accessibilityValue: 'Value',
+			accessibilityHint: 'Hint',
+			accessibilityHidden: true
+		});
+		win.add(label);
+		win.addEventListener('focus', function () {
+			try {
+				should(label.accessibilityLabel).eql('Text');
+				should(label.accessibilityValue).eql('Value');
+				should(label.accessibilityHint).eql('Hint');
+				should(label.accessibilityHidden).eql(true);
+
+				label.setAccessibilityLabel('New Text');
+				label.accessibilityValue = 'New Value';
+				label.accessibilityHint = 'New Hint';
+				label.accessibilityHidden = false;
+
+				should(label.accessibilityLabel).eql('New Text');
+				should(label.accessibilityValue).eql('New Value');
+				should(label.accessibilityHint).eql('New Hint');
+				should(label.accessibilityHidden).eql(false);
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
+		});
+		win.open();
+	});
+
+	describe('borderRadius corners', () => {
+		// FIXME: Due to very slow performance, I'm not turning on the image comparisons right now
+		// We need to speed up the code (presumably Buffer)
+		// const density = Ti.Platform.displayCaps.logicalDensityFactor;
+		// FIXME: Don't use dp/pts in the actual radii so we can avoid needing separate images per density?
+		// Do separate tests for verifying use of pts/dp versus density?
+
+		it('4 values in String', finish => {
+			win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+			const outerView = Ti.UI.createView({
+				width: '90px',
+				height: '90px',
+				backgroundColor: 'green'
+			});
+			const view = Ti.UI.createView({
+				width: '60px',
+				height: '60px',
+				borderRadius: '12px 12 12dp 12', // NOTE: Will this ruin image comparison when we vary device resolution?
+				backgroundColor: 'yellow'
+			});
+
+			win.addEventListener('postlayout', function postlayout() { // FIXME: Support once!
+				win.removeEventListener('postlayout', postlayout); // only run once
+				try {
+					should(view.borderRadius).be.a.String();
+					should(view.borderRadius).eql('12px 12 12dp 12');
+					// should(outerView).matchImage(`snapshots/borderRadius12px_12_12dp_12_${density}x.png`);
+				} catch (e) {
+					return finish(e);
+				}
+				finish();
+			});
+			outerView.add(view);
+			win.add(outerView);
+			win.open();
+		});
+
+		it('4 values in Array', finish => {
+			win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+			const outerView = Ti.UI.createView({
+				width: '90px',
+				height: '90px',
+				backgroundColor: 'green'
+			});
+			const view = Ti.UI.createView({
+				width: '60px',
+				height: '60px',
+				borderRadius: [ '12px', 12, '12dp', '12' ],
+				backgroundColor: 'yellow'
+			});
+
+			win.addEventListener('postlayout', function postlayout() {
+				win.removeEventListener('postlayout', postlayout); // only run once
+				try {
+					should(view.borderRadius).be.an.Array();
+					should(view.borderRadius.length).eql(4);
+					should(view.borderRadius).eql([ '12px', 12, '12dp', '12' ]);
+					// should be the exact same as above
+					// should(outerView).matchImage(`snapshots/borderRadius12px_12_12dp_12_${density}x.png`);
+				} catch (err) {
+					return finish(err);
+				}
+				finish();
+			});
+
+			outerView.add(view);
+			win.add(outerView);
+			win.open();
+		});
+
+		it('2 values in String', finish => {
+			win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+			const outerView = Ti.UI.createView({
+				width: '90px',
+				height: '90px',
+				backgroundColor: 'green'
+			});
+			const view = Ti.UI.createView({
+				width: '60px',
+				height: '60px',
+				borderRadius: '12px 12',
+				backgroundColor: 'yellow'
+			});
+
+			win.addEventListener('postlayout', function postlayout() {
+				win.removeEventListener('postlayout', postlayout); // only run once
+				try {
+					should(view.borderRadius).be.a.String();
+					should(view.borderRadius).eql('12px 12');
+					// should(outerView).matchImage(`snapshots/borderRadius12px_12_${density}x.png`);
+				} catch (e) {
+					return finish(e);
+				}
+				finish();
+			});
+			outerView.add(view);
+			win.add(outerView);
+			win.open();
+		});
+
+		it('2 values in Array', finish => {
+			win = Ti.UI.createWindow({ backgroundColor: 'blue' });
+			const outerView = Ti.UI.createView({
+				width: '90px',
+				height: '90px',
+				backgroundColor: 'green'
+			});
+			const view = Ti.UI.createView({
+				width: '60px',
+				height: '60px',
+				borderRadius: [ '12px', 12 ],
+				backgroundColor: 'yellow'
+			});
+
+			win.addEventListener('postlayout', function postlayout() {
+				win.removeEventListener('postlayout', postlayout); // only run once
+				try {
+					should(view.borderRadius).be.an.Array();
+					should(view.borderRadius.length).eql(2);
+					should(view.borderRadius).eql([ '12px', 12 ]);
+					// should be the exact same as above
+					// should(outerView).matchImage(`snapshots/borderRadius12px_12_${density}x.png`);
+				} catch (err) {
+					return finish(err);
+				}
+				finish();
+			});
+
+			outerView.add(view);
+			win.add(outerView);
+			win.open();
+		});
+	});
+
+	it.android('touchFeedback', finish => {
+		win = Ti.UI.createWindow({ layout: 'horizontal' });
+		win.add(Ti.UI.createLabel({
+			text: 'View 1',
+			touchFeedback: true,
+			touchFeedbackColor: 'yellow'
+		}));
+		win.add(Ti.UI.createLabel({
+			text: 'View 2',
+			backgroundColor: 'gray',
+			touchFeedback: true,
+			touchFeedbackColor: 'yellow'
+		}));
+		win.add(Ti.UI.createLabel({
+			text: 'View 3',
+			backgroundImage: '/Logo.png',
+			touchFeedback: true,
+			touchFeedbackColor: 'yellow'
+		}));
+		win.add(Ti.UI.createLabel({
+			text: 'View 4',
+			backgroundGradient: {
+				type: 'linear',
+				startPoint: { x: '0%', y: '50%' },
+				endPoint: { x: '100%', y: '50%' },
+				colors: [ { color: 'red', offset: 0.0 }, { color: 'blue', offset: 1.0 } ]
+			},
+			touchFeedback: true,
+			touchFeedbackColor: 'yellow'
+		}));
+		win.add(Ti.UI.createLabel({
+			text: 'View 5',
+			borderRadius: 20,
+			borderColor: 'red',
+			borderWidth: '8dp',
+			touchFeedback: true,
+			touchFeedbackColor: 'yellow'
+		}));
+		win.add(Ti.UI.createLabel({
+			text: 'View 6',
+			backgroundColor: 'gray',
+			borderRadius: 20,
+			borderColor: 'red',
+			borderWidth: '8dp',
+			touchFeedback: true,
+			touchFeedbackColor: 'yellow'
+		}));
+		win.add(Ti.UI.createLabel({
+			text: 'View 7',
+			backgroundImage: '/Logo.png',
+			borderRadius: 20,
+			borderColor: 'red',
+			borderWidth: '8dp',
+			touchFeedback: true,
+			touchFeedbackColor: 'yellow'
+		}));
+		win.add(Ti.UI.createLabel({
+			text: 'View 8',
+			backgroundGradient: {
+				type: 'linear',
+				startPoint: { x: '0%', y: '50%' },
+				endPoint: { x: '100%', y: '50%' },
+				colors: [ { color: 'red', offset: 0.0 }, { color: 'blue', offset: 1.0 } ]
+			},
+			borderRadius: 20,
+			borderColor: 'red',
+			borderWidth: '8dp',
+			touchFeedback: true,
+			touchFeedbackColor: 'yellow'
+		}));
+		win.addEventListener('open', () => finish());
 		win.open();
 	});
 });

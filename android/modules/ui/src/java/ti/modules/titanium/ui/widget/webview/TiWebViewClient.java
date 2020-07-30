@@ -7,26 +7,39 @@
 package ti.modules.titanium.ui.widget.webview;
 
 import org.appcelerator.kroll.KrollDict;
-import org.appcelerator.kroll.KrollProxy;
+import org.appcelerator.kroll.KrollFunction;
 import org.appcelerator.kroll.common.Log;
+import org.appcelerator.titanium.TiApplication;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.util.TiConvert;
 
 import ti.modules.titanium.media.TiVideoActivity;
 import ti.modules.titanium.ui.WebViewProxy;
+
+import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
+import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.net.http.SslError;
+import android.os.AsyncTask;
 import android.os.Build;
+import android.security.KeyChain;
+import android.security.KeyChainAliasCallback;
+import android.webkit.ClientCertRequest;
+import android.webkit.ClientCertRequestHandler;
 import android.webkit.HttpAuthHandler;
 import android.webkit.MimeTypeMap;
 import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
+import android.webkit.WebViewClientClassicExt;
 
-public class TiWebViewClient extends WebViewClient
+import java.security.PrivateKey;
+import java.security.cert.X509Certificate;
+
+public class TiWebViewClient extends WebViewClientClassicExt
 {
 	private static final String TAG = "TiWVC";
 
@@ -46,8 +59,7 @@ public class TiWebViewClient extends WebViewClient
 	{
 		super.onPageFinished(view, url);
 		WebViewProxy proxy = (WebViewProxy) webView.getProxy();
-		if (proxy == null || webView.hasSetUserAgent) {
-			webView.hasSetUserAgent = false;
+		if (proxy == null) {
 			return;
 		}
 		webView.changeProxyUrl(url);
@@ -82,7 +94,7 @@ public class TiWebViewClient extends WebViewClient
 	{
 		super.onPageStarted(view, url, favicon);
 		WebViewProxy proxy = (WebViewProxy) webView.getProxy();
-		if (proxy == null || webView.hasSetUserAgent) {
+		if (proxy == null) {
 			return;
 		}
 		KrollDict data = new KrollDict();
@@ -100,9 +112,7 @@ public class TiWebViewClient extends WebViewClient
 		}
 		KrollDict data = new KrollDict();
 		data.put("url", failingUrl);
-		data.put("errorCode", errorCode);
 		data.putCodeAndMessage(errorCode, description);
-		data.put("message", description);
 		proxy.fireEvent("error", data);
 	}
 
@@ -114,6 +124,19 @@ public class TiWebViewClient extends WebViewClient
 		if (proxy == null) {
 			return super.shouldOverrideUrlLoading(view, url);
 		}
+		if (proxy.hasProperty(TiC.PROPERTY_ON_LINK)) {
+			Object onLink = proxy.getProperty(TiC.PROPERTY_ON_LINK);
+			if (onLink instanceof KrollFunction) {
+				KrollFunction onLinkFunction = (KrollFunction) onLink;
+				KrollDict args = new KrollDict();
+				args.put(TiC.EVENT_PROPERTY_URL, url);
+				Object result = onLinkFunction.call(proxy.getKrollObject(), args);
+				if (result == null || (result instanceof Boolean && ((Boolean) result) == false)) {
+					webView.stopLoading();
+					return true;
+				}
+			}
+		}
 		if (proxy.hasProperty(TiC.PROPERTY_BLACKLISTED_URLS)) {
 			String[] blacklistedSites =
 				TiConvert.toStringArray((Object[]) proxy.getProperty(TiC.PROPERTY_BLACKLISTED_URLS));
@@ -123,10 +146,6 @@ public class TiWebViewClient extends WebViewClient
 					data.put("url", url);
 					data.put("message", "Webview did not load blacklisted url.");
 					proxy.fireEvent(TiC.PROPERTY_BLACKLIST_URL, data);
-
-					// Deprecated since 6.1.0, leave here until we remove it (7.0.0?)
-					proxy.fireEvent(TiC.PROPERTY_ON_STOP_BLACKLISTED_URL, data);
-
 					return true;
 				}
 			}
@@ -195,12 +214,113 @@ public class TiWebViewClient extends WebViewClient
 		this.password = password;
 	}
 
+	/*
+	 * ClientCertRequest wrapper for compatibility with both ClientCertRequest and ClientCertRequestHandler
+	 */
+	private class ClientCertRequestCompat
+	{
+		private ClientCertRequest clientCertRequest;
+		private ClientCertRequestHandler clientCertRequestHandler;
+
+		ClientCertRequestCompat(Object request)
+		{
+			// API 21+
+			if (Build.VERSION.SDK_INT >= 21 && request instanceof ClientCertRequest) {
+				clientCertRequest = (ClientCertRequest) request;
+
+				// API 16+
+			} else if (request instanceof ClientCertRequestHandler) {
+				clientCertRequestHandler = (ClientCertRequestHandler) request;
+			}
+		}
+
+		@SuppressLint("NewApi")
+		public void cancel()
+		{
+			if (clientCertRequest != null) {
+				clientCertRequest.cancel();
+			} else if (clientCertRequestHandler != null) {
+				clientCertRequestHandler.cancel();
+			}
+		}
+
+		@SuppressLint("NewApi")
+		public void ignore()
+		{
+			if (clientCertRequest != null) {
+				clientCertRequest.ignore();
+			} else if (clientCertRequestHandler != null) {
+				clientCertRequestHandler.ignore();
+			}
+		}
+
+		@SuppressLint("NewApi")
+		public void proceed(PrivateKey privateKey, X509Certificate[] x509Certificates)
+		{
+			if (clientCertRequest != null) {
+				clientCertRequest.proceed(privateKey, x509Certificates);
+			} else if (clientCertRequestHandler != null) {
+				clientCertRequestHandler.proceed(privateKey, x509Certificates);
+			}
+		}
+	}
+
+	@TargetApi(16)
+	private void handleClientCertRequest(final Object requestObj, final String host, final int port)
+	{
+		final Activity activity = TiApplication.getAppRootOrCurrentActivity();
+		final ClientCertRequestCompat request = new ClientCertRequestCompat(requestObj);
+
+		KeyChain.choosePrivateKeyAlias(activity, new KeyChainAliasCallback() {
+			@Override
+			public void alias(final String alias)
+			{
+				final AsyncTask<Void, Void, Void> task = new AsyncTask<Void, Void, Void>() {
+					@Override
+					protected Void doInBackground(Void... args)
+					{
+						try {
+							PrivateKey privateKey = KeyChain.getPrivateKey(activity, alias);
+							X509Certificate[] certificateChain = KeyChain.getCertificateChain(activity, alias);
+							request.proceed(privateKey, certificateChain);
+						} catch (Exception e) {
+							request.ignore();
+						}
+						return null;
+					}
+				}.execute();
+			}
+		}, null, null, host, port, null);
+	}
+
+	@TargetApi(21)
+	@Override
+	public void onReceivedClientCertRequest(WebView view, ClientCertRequest request)
+	{
+		handleClientCertRequest(request, request.getHost(), request.getPort());
+	}
+
+	/*
+	 * this is a "hidden" callback implemented on API 16 - 18 for handling certificate requests
+	 * note: Android 4.4 prevents this from being called, stating "Client certificates not supported in WebView"
+	 */
+	@TargetApi(16)
+	@Override
+	public void onReceivedClientCertRequest(WebView view, ClientCertRequestHandler handler, String host_and_port)
+	{
+		String[] hostPort = host_and_port.split(":");
+		String host = hostPort[0];
+		int port = Integer.parseInt(hostPort[1]);
+
+		handleClientCertRequest(handler, host, port);
+	}
+
 	@Override
 	public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error)
 	{
 		/*
-		 * in theory this should be checked to make sure it's not null but if there is some failure 
-		 * in the association then usage of proxy should trigger a NPE to make sure the issue 
+		 * in theory this should be checked to make sure it's not null but if there is some failure
+		 * in the association then usage of proxy should trigger a NPE to make sure the issue
 		 * is not ignored
 		 */
 		WebViewProxy proxy = (WebViewProxy) webView.getProxy();
@@ -241,5 +361,12 @@ public class TiWebViewClient extends WebViewClient
 		KrollDict data = new KrollDict();
 		data.put(TiC.PROPERTY_URL, url);
 		proxy.fireEvent(TiC.EVENT_WEBVIEW_ON_LOAD_RESOURCE, data);
+	}
+
+	@Override
+	public void onScaleChanged(WebView view, float oldScale, float newScale)
+	{
+		super.onScaleChanged(view, oldScale, newScale);
+		webView.setZoomLevel(newScale);
 	}
 }

@@ -7,13 +7,10 @@
 package org.appcelerator.titanium.view;
 
 import java.lang.ref.WeakReference;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.KrollFunction;
@@ -32,7 +29,6 @@ import org.appcelerator.titanium.util.TiAnimationBuilder.TiMatrixAnimation;
 import org.appcelerator.titanium.util.TiConvert;
 import org.appcelerator.titanium.util.TiUIHelper;
 import org.appcelerator.titanium.view.TiCompositeLayout.LayoutParams;
-import org.appcelerator.titanium.view.TiGradientDrawable.GradientType;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
@@ -41,16 +37,15 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Matrix;
-import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.ShapeDrawable;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-import android.support.v4.view.ViewCompat;
+import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.util.SparseArray;
@@ -90,10 +85,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	private static final boolean LOWER_THAN_JELLYBEAN = (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2);
 	private static final boolean LOWER_THAN_MARSHMALLOW = (Build.VERSION.SDK_INT < Build.VERSION_CODES.M);
 
-	private static final int LAYER_TYPE_SOFTWARE = 1;
 	private static final String TAG = "TiUIView";
-
-	private static AtomicInteger idGenerator;
 
 	// When distinguishing twofingertap and pinch events, minimum motion (in pixels)
 	// to qualify as a scale event.
@@ -126,6 +118,11 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	protected TiAnimationBuilder animBuilder;
 	protected TiBackgroundDrawable background;
 
+	public TiBackgroundDrawable getBackground()
+	{
+		return background;
+	}
+
 	protected KrollDict additionalEventData;
 
 	// Since Android doesn't have a property to check to indicate
@@ -146,8 +143,6 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	// so this holds a reference to the view which is used for touching,
 	// i.e., the view passed to registerForTouch.
 	private WeakReference<View> touchView = null;
-
-	private Method mSetLayerTypeMethod = null; // Honeycomb, for turning off hw acceleration.
 
 	private boolean zIndexChanged = false;
 	private TiBorderWrapperView borderView;
@@ -170,10 +165,6 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	 */
 	public TiUIView(TiViewProxy proxy)
 	{
-		if (idGenerator == null) {
-			idGenerator = new AtomicInteger(0);
-		}
-
 		this.proxy = proxy;
 		this.layoutParams = new TiCompositeLayout.LayoutParams();
 	}
@@ -331,9 +322,6 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	 */
 	protected void setNativeView(View view)
 	{
-		if (view.getId() == View.NO_ID) {
-			view.setId(idGenerator.incrementAndGet());
-		}
 		this.nativeView = view;
 		boolean clickable = true;
 
@@ -444,22 +432,20 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		return d.containsKeyAndNotNull(TiC.PROPERTY_BACKGROUND_GRADIENT);
 	}
 
-	private boolean hasBorder(KrollDict d)
+	protected boolean hasBorder(KrollDict d)
 	{
 		return d.containsKeyAndNotNull(TiC.PROPERTY_BORDER_COLOR)
 			|| (d.containsKeyAndNotNull(TiC.PROPERTY_BORDER_WIDTH)
 				&& TiConvert.toTiDimension(d.getString(TiC.PROPERTY_BORDER_WIDTH), TiDimension.TYPE_WIDTH).getValue()
 					   > 0f)
-			|| (d.containsKeyAndNotNull(TiC.PROPERTY_BORDER_RADIUS)
-				&& TiConvert.toTiDimension(d.getString(TiC.PROPERTY_BORDER_RADIUS), TiDimension.TYPE_WIDTH).getValue()
-					   > 0f);
+			|| (d.containsKeyAndNotNull(TiC.PROPERTY_BORDER_RADIUS));
 	}
 
 	private boolean hasColorState(KrollDict d)
 	{
 		return d.containsKeyAndNotNull(TiC.PROPERTY_BACKGROUND_SELECTED_COLOR)
 			|| d.containsKeyAndNotNull(TiC.PROPERTY_BACKGROUND_FOCUSED_COLOR)
-			|| d.containsKeyAndNotNull(TiC.PROPERTY_BACKGROUND_FOCUSED_COLOR);
+			|| d.containsKeyAndNotNull(TiC.PROPERTY_BACKGROUND_DISABLED_COLOR);
 	}
 
 	public float[] getPreTranslationValue(float[] points)
@@ -546,7 +532,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 					public void callAsync(KrollObject krollObject, Object[] args)
 					{
 						bTransformPending.set(false);
-						proxy.handlePendingAnimation(true);
+						p.handlePendingAnimation(true);
 					}
 				});
 				animBuilder.start(p, v);
@@ -827,8 +813,6 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			boolean hasColorState = hasColorState(d);
 			boolean hasBorder = hasBorder(d);
 			boolean hasGradient = hasGradient(d);
-			boolean nativeViewNull = (nativeView == null);
-
 			boolean requiresCustomBackground = hasImage || hasColorState || hasBorder || hasGradient;
 
 			// PROPERTY_BACKGROUND_REPEAT is implicitly passed as false though not used in JS. So check the truth value and proceed.
@@ -844,16 +828,11 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 					background = null;
 				}
 
-				if (d.containsKeyAndNotNull(TiC.PROPERTY_BACKGROUND_COLOR)) {
-					Integer bgColor = TiConvert.toColor(d, TiC.PROPERTY_BACKGROUND_COLOR);
-					if (!nativeViewNull) {
-						if (canApplyTouchFeedback(d)) {
-							applyTouchFeedback(bgColor, d.containsKey(TiC.PROPERTY_TOUCH_FEEDBACK_COLOR)
-															? TiConvert.toColor(d, TiC.PROPERTY_TOUCH_FEEDBACK_COLOR)
-															: null);
-						} else {
-							nativeView.setBackgroundColor(bgColor);
-						}
+				if (this.nativeView != null) {
+					if (d.containsKeyAndNotNull(TiC.PROPERTY_BACKGROUND_COLOR)) {
+						this.nativeView.setBackgroundColor(TiConvert.toColor(d, TiC.PROPERTY_BACKGROUND_COLOR));
+					} else {
+						this.nativeView.setBackground(null);
 					}
 				}
 			} else {
@@ -887,13 +866,15 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 						// it.
 						// This will ensure the border wrapper view is added correctly.
 						TiUIView parentView = parent.getOrCreateView();
-						int removedChildIndex = parentView.findChildIndex(this);
-						parentView.remove(this);
-						initializeBorder(d, bgColor);
-						if (removedChildIndex == -1) {
-							parentView.add(this);
-						} else {
-							parentView.add(this, removedChildIndex);
+						if (parentView != null) {
+							int removedChildIndex = parentView.findChildIndex(this);
+							parentView.remove(this);
+							initializeBorder(d, bgColor);
+							if (removedChildIndex == -1) {
+								parentView.add(this);
+							} else {
+								parentView.add(this, removedChildIndex);
+							}
 						}
 					} else if (key.startsWith(TiC.PROPERTY_BORDER_PREFIX)) {
 						handleBorderProperty(key, newValue);
@@ -901,19 +882,22 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 					// TIMOB-24898: disable HW acceleration to allow transparency
 					// when the backgroundColor alpha channel has been set
-					byte bgAlpha = bgColor != null ? (byte) (bgColor >> 24) : (byte) 0xFF;
-					if (bgAlpha != 0xFF) {
+					if ((bgColor != null) && (Color.alpha(bgColor) < 255)) {
 						disableHWAcceleration();
 					}
 				}
 
 				applyCustomBackground();
 			}
+			if (canApplyTouchFeedback(d)) {
+				String colorString = TiConvert.toString(d.get(TiC.PROPERTY_TOUCH_FEEDBACK_COLOR));
+				applyTouchFeedback((colorString != null) ? TiConvert.toColor(colorString) : null);
+			}
 			if (key.equals(TiC.PROPERTY_OPACITY)) {
 				setOpacity(TiConvert.toFloat(newValue, 1f));
 			}
-			if (!nativeViewNull) {
-				nativeView.postInvalidate();
+			if (this.nativeView != null) {
+				this.nativeView.postInvalidate();
 			}
 		} else if (key.equals(TiC.PROPERTY_SOFT_KEYBOARD_ON_FOCUS)) {
 			Log.w(TAG,
@@ -937,6 +921,14 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		} else if (key.equals(TiC.PROPERTY_ELEVATION)) {
 			if (getOuterView() != null) {
 				ViewCompat.setElevation(getOuterView(), TiConvert.toFloat(newValue));
+			}
+		} else if (key.equals(TiC.PROPERTY_ANCHOR_POINT)) {
+			if (getOuterView() != null) {
+				if (newValue instanceof HashMap) {
+					setAnchor((HashMap) newValue);
+				} else {
+					Log.e(TAG, "Invalid argument type for anchorPoint property. Ignoring");
+				}
 			}
 		} else if (key.equals(TiC.PROPERTY_TRANSLATION_X)) {
 			if (getOuterView() != null) {
@@ -1013,25 +1005,21 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			handleBackgroundImage(d);
 
 		} else if (d.containsKey(TiC.PROPERTY_BACKGROUND_COLOR) && !nativeViewNull) {
+			// Set the background color on the view directly only if there is no border.
+			// If border is present, then we must use the TiBackgroundDrawable.
 			bgColor = TiConvert.toColor(d, TiC.PROPERTY_BACKGROUND_COLOR);
-
-			if (canApplyTouchFeedback(d)) {
-				applyTouchFeedback(bgColor, d.containsKey(TiC.PROPERTY_TOUCH_FEEDBACK_COLOR)
-												? TiConvert.toColor(d, TiC.PROPERTY_TOUCH_FEEDBACK_COLOR)
-												: null);
-			} else {
-				// Set the background color on the view directly only
-				// if there is no border. If a border is present we must
-				// use the TiBackgroundDrawable.
-				if (hasBorder(d)) {
-					if (background == null) {
-						applyCustomBackground(false);
-					}
-					background.setBackgroundColor(bgColor);
-				} else {
-					nativeView.setBackgroundColor(bgColor);
+			if (hasBorder(d)) {
+				if (background == null) {
+					applyCustomBackground(false);
 				}
+				background.setBackgroundColor(bgColor);
+			} else {
+				nativeView.setBackgroundColor(bgColor);
 			}
+		}
+		if (canApplyTouchFeedback(d)) {
+			String colorString = TiConvert.toString(d.get(TiC.PROPERTY_TOUCH_FEEDBACK_COLOR));
+			applyTouchFeedback((colorString != null) ? TiConvert.toColor(colorString) : null);
 		}
 
 		if (d.containsKey(TiC.PROPERTY_HIDDEN_BEHAVIOR) && !nativeViewNull) {
@@ -1072,12 +1060,25 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		}
 
 		if (d.containsKey(TiC.PROPERTY_ACCESSIBILITY_HINT) || d.containsKey(TiC.PROPERTY_ACCESSIBILITY_LABEL)
-			|| d.containsKey(TiC.PROPERTY_ACCESSIBILITY_VALUE) || d.containsKey(TiC.PROPERTY_ACCESSIBILITY_HIDDEN)) {
-			applyAccessibilityProperties();
+			|| d.containsKey(TiC.PROPERTY_ACCESSIBILITY_VALUE)) {
+			applyContentDescription(d);
+		}
+
+		if (d.containsKey(TiC.PROPERTY_ACCESSIBILITY_HIDDEN)) {
+			applyAccessibilityHidden(d.get(TiC.PROPERTY_ACCESSIBILITY_HIDDEN));
 		}
 
 		if (d.containsKey(TiC.PROPERTY_ELEVATION) && !nativeViewNull) {
 			ViewCompat.setElevation(getOuterView(), TiConvert.toFloat(d, TiC.PROPERTY_ELEVATION));
+		}
+
+		if (d.containsKey(TiC.PROPERTY_ANCHOR_POINT) && !nativeViewNull) {
+			Object value = d.get(TiC.PROPERTY_ANCHOR_POINT);
+			if (value instanceof HashMap) {
+				setAnchor((HashMap) d);
+			} else {
+				Log.e(TAG, "Invalid argument type for anchorPoint property. Ignoring");
+			}
 		}
 
 		if (d.containsKey(TiC.PROPERTY_ROTATION) && !nativeViewNull) {
@@ -1115,6 +1116,19 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		if (LOLLIPOP_OR_GREATER && !nativeViewNull && d.containsKeyAndNotNull(TiC.PROPERTY_TRANSITION_NAME)) {
 			ViewCompat.setTransitionName(nativeView, d.getString(TiC.PROPERTY_TRANSITION_NAME));
 		}
+	}
+
+	private void setAnchor(HashMap point)
+	{
+		View outerView = getOuterView();
+		if (outerView == null) {
+			return;
+		}
+		float pivotX = TiConvert.toFloat(point.get(TiC.PROPERTY_X), 0.5f);
+		float pivotY = TiConvert.toFloat(point.get(TiC.PROPERTY_Y), 0.5f);
+
+		ViewCompat.setPivotX(outerView, pivotX * outerView.getWidth());
+		ViewCompat.setPivotY(outerView, pivotY * outerView.getHeight());
 	}
 
 	// TODO dead code?
@@ -1157,7 +1171,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	/**
 	 * @param props View's property dictionary
-	 * @return true if touch feedback can be applied. 
+	 * @return true if touch feedback can be applied.
 	 */
 	protected boolean canApplyTouchFeedback(@NonNull KrollDict props)
 	{
@@ -1166,39 +1180,72 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	}
 
 	/**
-	 * Applies touch feedback. Should check canApplyTouchFeedback() before calling this. 
-	 * @param backgroundColor The background color of the view. 
-	 * @param rippleColor The ripple color.
+	 * Applies touch feedback. Should check canApplyTouchFeedback() before calling this.
+	 * @param rippleColor The ripple color to use. Set to null to use system's default ripple color.
 	 */
-	private void applyTouchFeedback(@NonNull Integer backgroundColor, @Nullable Integer rippleColor)
+	private void applyTouchFeedback(Integer rippleColor)
 	{
+		// Do not continue if there is no view to modify.
+		if (this.nativeView == null) {
+			return;
+		}
+
+		// Fetch default ripple color if given null.
 		if (rippleColor == null) {
-			Context context = TiApplication.getInstance();
+			Context context = proxy.getActivity();
 			TypedValue attribute = new TypedValue();
 			if (context.getTheme().resolveAttribute(android.R.attr.colorControlHighlight, attribute, true)) {
-				rippleColor = context.getResources().getColor(attribute.resourceId);
-			} else {
-				throw new RuntimeException("android.R.attr.colorControlHighlight cannot be resolved into Drawable");
+				rippleColor = attribute.data;
+			}
+			if (rippleColor == null) {
+				Log.e(TAG, "android.R.attr.colorControlHighlight cannot be resolved into Drawable");
+				return;
 			}
 		}
-		RippleDrawable rippleDrawable =
-			new RippleDrawable(ColorStateList.valueOf(rippleColor), new ColorDrawable(backgroundColor), null);
-		nativeView.setBackground(rippleDrawable);
+
+		// Fetch the background drawable that we'll be applying the ripple effect to.
+		Drawable backgroundDrawable = this.background;
+		if (backgroundDrawable == null) {
+			backgroundDrawable = this.nativeView.getBackground();
+		}
+
+		// Create a mask if a background doesn't exist or if it's completely transparent.
+		// Note: Ripple effect won't work unless it has something opaque to draw to. Use mask as a fallback.
+		ShapeDrawable maskDrawable = null;
+		boolean isVisible = (backgroundDrawable != null);
+		if (backgroundDrawable instanceof ColorDrawable) {
+			int colorValue = ((ColorDrawable) backgroundDrawable).getColor();
+			if (Color.alpha(colorValue) <= 0) {
+				isVisible = false;
+			}
+		}
+		if (!isVisible) {
+			maskDrawable = new ShapeDrawable();
+		}
+
+		// Replace view's existing background with ripple effect wrapping the old drawable.
+		nativeView.setBackground(
+			new RippleDrawable(ColorStateList.valueOf(rippleColor), backgroundDrawable, maskDrawable));
 	}
 
+	@Override
 	public void onFocusChange(final View v, boolean hasFocus)
 	{
+		// Show/hide the virtual keyboard.
 		if (hasFocus) {
 			TiMessenger.postOnMain(new Runnable() {
+				@Override
 				public void run()
 				{
 					TiUIHelper.requestSoftInputChange(proxy, v);
 				}
 			});
-			fireEvent(TiC.EVENT_FOCUS, getFocusEventObject(hasFocus));
-		} else {
-			fireEvent(TiC.EVENT_BLUR, getFocusEventObject(hasFocus));
 		}
+
+		// Fire a focus/blur event. (This event should not be bubbled.)
+		boolean isBubbled = false;
+		String eventName = hasFocus ? TiC.EVENT_FOCUS : TiC.EVENT_BLUR;
+		fireEvent(eventName, getFocusEventObject(hasFocus), isBubbled);
 	}
 
 	protected KrollDict getFocusEventObject(boolean hasFocus)
@@ -1221,6 +1268,14 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		if (nativeView != null) {
 			nativeView.requestFocus();
 		}
+	}
+
+	public boolean isFocused()
+	{
+		if (nativeView != null) {
+			return nativeView.hasFocus();
+		}
+		return false;
 	}
 
 	/**
@@ -1253,7 +1308,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				if (Log.isDebugModeEnabled()) {
 					Log.d(TAG, "Group has: " + vg.getChildCount(), Log.DEBUG_MODE);
 				}
-				if (!(vg instanceof AdapterView<?>) ) {
+				if (!(vg instanceof AdapterView<?>)) {
 					vg.removeAllViews();
 				}
 			}
@@ -1266,6 +1321,12 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				}
 				d = null;
 			}
+			if (!(nativeView instanceof AdapterView)) {
+				nativeView.setOnClickListener(null);
+			}
+			nativeView.setOnLongClickListener(null);
+			nativeView.setOnTouchListener(null);
+			nativeView.setOnDragListener(null);
 			nativeView.setOnFocusChangeListener(null);
 			nativeView = null;
 			borderView = null;
@@ -1278,8 +1339,8 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				remove(child);
 			}
 			children.clear();
+			children = null;
 		}
-		children = null;
 		proxy = null;
 		layoutParams = null;
 	}
@@ -1355,13 +1416,12 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		if (gradientProperties != null) {
 			try {
 				gradientDrawable = new TiGradientDrawable(nativeView, gradientProperties);
-				if (gradientDrawable.getGradientType() == GradientType.RADIAL_GRADIENT) {
-					// TODO: Remove this once we support radial gradients.
-					Log.w(TAG, "Android does not support radial gradients.");
-					gradientDrawable = null;
+			} catch (Exception ex) {
+				String message = ex.getMessage();
+				if (message == null) {
+					message = "Unknown";
 				}
-			} catch (IllegalArgumentException e) {
-				gradientDrawable = null;
+				Log.e(TAG, "Failed to create '" + TiC.PROPERTY_BACKGROUND_GRADIENT + "'. Reason: " + message);
 			}
 		}
 
@@ -1419,17 +1479,10 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				}
 
 				if (d.containsKey(TiC.PROPERTY_BORDER_RADIUS)) {
-					float radius = 0;
-					TiDimension radiusDim =
-						TiConvert.toTiDimension(d.get(TiC.PROPERTY_BORDER_RADIUS), TiDimension.TYPE_WIDTH);
-					if (radiusDim != null) {
-						radius = (float) radiusDim.getPixels(getNativeView());
-					}
-					if (radius > 0f && HONEYCOMB_OR_GREATER
-						&& (LOWER_THAN_JELLYBEAN || (d.containsKey(TiC.PROPERTY_OPACITY) && LOWER_THAN_MARSHMALLOW))) {
+					if (d.containsKey(TiC.PROPERTY_OPACITY) && LOWER_THAN_MARSHMALLOW) {
 						disableHWAcceleration();
 					}
-					borderView.setRadius(radius);
+					borderView.setRadius(d.get(TiC.PROPERTY_BORDER_RADIUS));
 				}
 
 				if (bgColor != null) {
@@ -1440,8 +1493,8 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 					borderView.setColor(TiConvert.toColor(d, TiC.PROPERTY_BORDER_COLOR));
 				}
 
-				//Have a default border width of 1
-				Object borderWidth = "1";
+				//Have a default border width of 1 if the border has defined color.
+				Object borderWidth = d.containsKeyAndNotNull(TiC.PROPERTY_BORDER_COLOR) ? "1" : "0";
 				if (d.containsKey(TiC.PROPERTY_BORDER_WIDTH)) {
 					borderWidth = d.get(TiC.PROPERTY_BORDER_WIDTH);
 				} else {
@@ -1451,9 +1504,6 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 				TiDimension width = TiConvert.toTiDimension(borderWidth, TiDimension.TYPE_WIDTH);
 				if (width != null) {
-					if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.JELLY_BEAN) {
-						disableHWAcceleration();
-					}
 					borderView.setBorderWidth((float) width.getPixels(borderView));
 				}
 
@@ -1463,8 +1513,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 			// TIMOB-24898: disable HW acceleration to allow transparency
 			// when the backgroundColor alpha channel has been set
-			byte bgAlpha = bgColor != null ? (byte) (bgColor >> 24) : (byte) 0xFF;
-			if (bgAlpha != 0xFF) {
+			if ((bgColor != null) && (Color.alpha(bgColor) < 255)) {
 				disableHWAcceleration();
 			}
 		}
@@ -1478,16 +1527,10 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				borderView.setBorderWidth(1);
 			}
 		} else if (TiC.PROPERTY_BORDER_RADIUS.equals(property)) {
-			float radius = 0;
-			TiDimension radiusDim = TiConvert.toTiDimension(value, TiDimension.TYPE_WIDTH);
-			if (radiusDim != null) {
-				radius = (float) radiusDim.getPixels(getNativeView());
-			}
-			if (radius > 0f && HONEYCOMB_OR_GREATER
-				&& (LOWER_THAN_JELLYBEAN || (proxy.hasProperty(TiC.PROPERTY_OPACITY) && LOWER_THAN_MARSHMALLOW))) {
+			if (proxy.hasProperty(TiC.PROPERTY_OPACITY) && LOWER_THAN_MARSHMALLOW) {
 				disableHWAcceleration();
 			}
-			borderView.setRadius(radius);
+			borderView.setRadius(value);
 		} else if (TiC.PROPERTY_BORDER_WIDTH.equals(property)) {
 			float width = 0;
 			TiDimension bwidth = TiConvert.toTiDimension(value, TiDimension.TYPE_WIDTH);
@@ -1510,9 +1553,12 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	protected KrollDict dictFromEvent(MotionEvent e)
 	{
+		TiDimension xDimension = new TiDimension((double) e.getX(), TiDimension.TYPE_LEFT);
+		TiDimension yDimension = new TiDimension((double) e.getY(), TiDimension.TYPE_TOP);
+
 		KrollDict data = new KrollDict();
-		data.put(TiC.EVENT_PROPERTY_X, (double) e.getX());
-		data.put(TiC.EVENT_PROPERTY_Y, (double) e.getY());
+		data.put(TiC.EVENT_PROPERTY_X, xDimension.getAsDefault(this.nativeView));
+		data.put(TiC.EVENT_PROPERTY_Y, yDimension.getAsDefault(this.nativeView));
 		data.put(TiC.EVENT_PROPERTY_FORCE, (double) e.getPressure());
 		data.put(TiC.EVENT_PROPERTY_SIZE, (double) e.getSize());
 		data.put(TiC.EVENT_PROPERTY_SOURCE, proxy);
@@ -1599,7 +1645,18 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 					if (didScale) {
 						KrollDict data = new KrollDict();
+						data.put(TiC.EVENT_PROPERTY_CURRENT_SPAN, sgd.getCurrentSpan());
+						data.put(TiC.EVENT_PROPERTY_CURRENT_SPAN_X, sgd.getCurrentSpanX());
+						data.put(TiC.EVENT_PROPERTY_CURRENT_SPAN_Y, sgd.getCurrentSpanY());
+						data.put(TiC.EVENT_PROPERTY_TIME, sgd.getEventTime());
+						data.put(TiC.EVENT_PROPERTY_FOCUS_X, sgd.getFocusX());
+						data.put(TiC.EVENT_PROPERTY_FOCUS_Y, sgd.getFocusY());
+						data.put(TiC.EVENT_PROPERTY_PREVIOUS_SPAN, sgd.getPreviousSpan());
+						data.put(TiC.EVENT_PROPERTY_PREVIOUS_SPAN_X, sgd.getPreviousSpanX());
+						data.put(TiC.EVENT_PROPERTY_PREVIOUS_SPAN_Y, sgd.getPreviousSpanY());
 						data.put(TiC.EVENT_PROPERTY_SCALE, sgd.getCurrentSpan() / startSpan);
+						data.put(TiC.EVENT_PROPERTY_TIME_DELTA, sgd.getTimeDelta());
+						data.put(TiC.EVENT_PROPERTY_IN_PROGRESS, sgd.isInProgress());
 						data.put(TiC.EVENT_PROPERTY_VELOCITY, (sgd.getScaleFactor() - 1.0f) / timeDelta * 1000);
 						data.put(TiC.EVENT_PROPERTY_SOURCE, proxy);
 
@@ -1682,8 +1739,10 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			public boolean onTouch(View view, MotionEvent event)
 			{
 				if (event.getAction() == MotionEvent.ACTION_UP) {
-					lastUpEvent.put(TiC.EVENT_PROPERTY_X, (double) event.getX());
-					lastUpEvent.put(TiC.EVENT_PROPERTY_Y, (double) event.getY());
+					TiDimension xDimension = new TiDimension((double) event.getX(), TiDimension.TYPE_LEFT);
+					TiDimension yDimension = new TiDimension((double) event.getY(), TiDimension.TYPE_TOP);
+					lastUpEvent.put(TiC.EVENT_PROPERTY_X, xDimension.getAsDefault(view));
+					lastUpEvent.put(TiC.EVENT_PROPERTY_Y, yDimension.getAsDefault(view));
 				}
 
 				if (proxy != null && proxy.hierarchyHasListener(TiC.EVENT_PINCH)) {
@@ -1749,7 +1808,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 		if (proxy.hasProperty(TiC.PROPERTY_TOUCH_ENABLED)) {
 			boolean enabled = TiConvert.toBoolean(proxy.getProperty(TiC.PROPERTY_TOUCH_ENABLED), true);
-			touchable.setEnabled(enabled);
+			touchable.setClickable(enabled);
 		}
 		//Checking and setting touch sound for view
 		if (proxy.hasProperty(TiC.PROPERTY_SOUND_EFFECTS_ENABLED)) {
@@ -1899,7 +1958,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	public KrollDict toImage()
 	{
-		return TiUIHelper.viewToImage(proxy.getProperties(), getNativeView());
+		return TiUIHelper.viewToImage(proxy.getProperties(), getOuterView());
 	}
 
 	private View getTouchView()
@@ -1998,36 +2057,8 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	protected void disableHWAcceleration()
 	{
-		if (borderView == null
-			|| (Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN && !borderView.isHardwareAccelerated())) {
-			return;
-		}
-		Log.d(TAG, "Disabling hardware acceleration for instance of " + borderView.getClass().getSimpleName(),
-			  Log.DEBUG_MODE);
-		if (mSetLayerTypeMethod == null) {
-			try {
-				Class<? extends View> c = borderView.getClass();
-				mSetLayerTypeMethod = c.getMethod("setLayerType", int.class, Paint.class);
-			} catch (SecurityException e) {
-				Log.e(TAG, "SecurityException trying to get View.setLayerType to disable hardware acceleration.", e,
-					  Log.DEBUG_MODE);
-			} catch (NoSuchMethodException e) {
-				Log.e(TAG, "NoSuchMethodException trying to get View.setLayerType to disable hardware acceleration.", e,
-					  Log.DEBUG_MODE);
-			}
-		}
-
-		if (mSetLayerTypeMethod == null) {
-			return;
-		}
-		try {
-			mSetLayerTypeMethod.invoke(borderView, LAYER_TYPE_SOFTWARE, null);
-		} catch (IllegalArgumentException e) {
-			Log.e(TAG, e.getMessage(), e);
-		} catch (IllegalAccessException e) {
-			Log.e(TAG, e.getMessage(), e);
-		} catch (InvocationTargetException e) {
-			Log.e(TAG, e.getMessage(), e);
+		if (this.borderView != null) {
+			this.borderView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
 		}
 	}
 
@@ -2104,58 +2135,15 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		}
 	}
 
-	/**
-	 * Our view proxy supports three properties to match iOS regarding
-	 * the text that is read aloud (or otherwise communicated) by the
-	 * assistive technology: accessibilityLabel, accessibilityHint
-	 * and accessibilityValue.
-	 *
-	 * We combine these to create the single Android property contentDescription.
-	 * (e.g., View.setContentDescription(...));
-	 */
-	protected String composeContentDescription()
+	private void applyContentDescription(KrollDict properties)
 	{
-		if (proxy == null) {
-			return null;
+		if (proxy == null || nativeView == null) {
+			return;
 		}
-
-		final String punctuationPattern = "^.*\\p{Punct}\\s*$";
-		StringBuilder buffer = new StringBuilder();
-
-		KrollDict properties = proxy.getProperties();
-		String label, hint, value;
-		label = TiConvert.toString(properties.get(TiC.PROPERTY_ACCESSIBILITY_LABEL));
-		hint = TiConvert.toString(properties.get(TiC.PROPERTY_ACCESSIBILITY_HINT));
-		value = TiConvert.toString(properties.get(TiC.PROPERTY_ACCESSIBILITY_VALUE));
-
-		if (!TextUtils.isEmpty(label)) {
-			buffer.append(label);
-			if (!label.matches(punctuationPattern)) {
-				buffer.append(".");
-			}
+		String contentDescription = composeContentDescription(properties);
+		if (contentDescription != null) {
+			nativeView.setContentDescription(contentDescription);
 		}
-
-		if (!TextUtils.isEmpty(value)) {
-			if (buffer.length() > 0) {
-				buffer.append(" ");
-			}
-			buffer.append(value);
-			if (!value.matches(punctuationPattern)) {
-				buffer.append(".");
-			}
-		}
-
-		if (!TextUtils.isEmpty(hint)) {
-			if (buffer.length() > 0) {
-				buffer.append(" ");
-			}
-			buffer.append(hint);
-			if (!hint.matches(punctuationPattern)) {
-				buffer.append(".");
-			}
-		}
-
-		return buffer.toString();
 	}
 
 	private void applyAccessibilityProperties()
@@ -2188,5 +2176,64 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		}
 
 		ViewCompat.setImportantForAccessibility(nativeView, importanceMode);
+	}
+
+	/**
+	 * Our view proxy supports three properties to match iOS regarding
+	 * the text that is read aloud (or otherwise communicated) by the
+	 * assistive technology: accessibilityLabel, accessibilityHint
+	 * and accessibilityValue.
+	 *
+	 * We combine these to create the single Android property contentDescription.
+	 * (e.g., View.setContentDescription(...));
+	 */
+	public static String composeContentDescription(KrollDict properties)
+	{
+		if (properties == null) {
+			return null;
+		}
+
+		final String punctuationPattern = "^.*\\p{Punct}\\s*$";
+		StringBuilder buffer = new StringBuilder();
+		String label = properties.optString(TiC.PROPERTY_ACCESSIBILITY_LABEL, "");
+		String hint = properties.optString(TiC.PROPERTY_ACCESSIBILITY_HINT, "");
+		String value = properties.optString(TiC.PROPERTY_ACCESSIBILITY_VALUE, "");
+
+		if (!TextUtils.isEmpty(label)) {
+			buffer.append(label);
+			if (!label.matches(punctuationPattern)) {
+				buffer.append(".");
+			}
+		}
+
+		if (!TextUtils.isEmpty(value)) {
+			if (buffer.length() > 0) {
+				buffer.append(" ");
+			}
+			buffer.append(value);
+			if (!value.matches(punctuationPattern)) {
+				buffer.append(".");
+			}
+		}
+
+		if (!TextUtils.isEmpty(hint)) {
+			if (buffer.length() > 0) {
+				buffer.append(" ");
+			}
+			buffer.append(hint);
+			if (!hint.matches(punctuationPattern)) {
+				buffer.append(".");
+			}
+		}
+
+		return buffer.toString();
+	}
+
+	public String composeContentDescription()
+	{
+		if (proxy == null) {
+			return null;
+		}
+		return composeContentDescription(proxy.getProperties());
 	}
 }

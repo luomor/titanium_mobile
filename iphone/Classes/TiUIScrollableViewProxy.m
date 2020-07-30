@@ -60,7 +60,7 @@
   [self lockViews];
   NSArray *result = [viewProxies copy];
   [self unlockViews];
-  return [result autorelease];
+  return [result autorelease] ?: @[];
 }
 
 - (NSUInteger)viewCount
@@ -86,17 +86,19 @@
                    createIfNeeded:NO
                     waitUntilDone:NO];
 #else
-    TiThreadPerformOnMainThread(^{
-      [[oldViewProxy view] removeFromSuperview];
-    },
-        NO);
+    TiThreadPerformOnMainThread(
+        ^{
+          [[oldViewProxy view] removeFromSuperview];
+        },
+        YES);
 #endif
     if (![args containsObject:oldViewProxy]) {
       [oldViewProxy setParent:nil];
-      TiThreadPerformOnMainThread(^{
-        [oldViewProxy detachView];
-      },
-          NO);
+      TiThreadPerformOnMainThread(
+          ^{
+            [oldViewProxy detachView];
+          },
+          YES);
       [self forgetProxy:oldViewProxy];
     }
   }
@@ -155,7 +157,7 @@
 
 - (void)removeView:(id)args
 { //TODO: Refactor this properly.
-#if defined(TI_USE_AUTOLAYOUT) || defined(TI_USE_KROLL_THREAD)
+#if defined(TI_USE_AUTOLAYOUT)
   ENSURE_UI_THREAD(removeView, args)
 #endif
   ENSURE_SINGLE_ARG(args, NSObject);
@@ -191,9 +193,10 @@
 #ifdef TI_USE_AUTOLAYOUT
   args = doomedView;
 #endif
-  TiThreadPerformOnMainThread(^{
-    [doomedView detachView];
-  },
+  TiThreadPerformOnMainThread(
+      ^{
+        [doomedView detachView];
+      },
       NO);
   [self forgetProxy:doomedView];
   [viewProxies removeObject:doomedView];
@@ -221,9 +224,10 @@
   NSInteger index = [self indexFromArg:args];
   if (index >= 0 && index < [self viewCount]) {
     if ([self viewAttached]) {
-      TiThreadPerformOnMainThread(^{
-        [((TiUIScrollableView *)self.view) setCurrentPage:NUMINTEGER(index) animated:NUMBOOL(YES)];
-      },
+      TiThreadPerformOnMainThread(
+          ^{
+            [((TiUIScrollableView *)self.view) setCurrentPage:NUMINTEGER(index) animated:NUMBOOL(YES)];
+          },
           NO);
     } else {
       [self replaceValue:NUMINTEGER(index) forKey:@"currentPage" notification:NO];

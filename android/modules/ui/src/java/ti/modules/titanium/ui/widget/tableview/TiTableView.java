@@ -13,11 +13,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.KrollProxy;
 import org.appcelerator.kroll.common.Log;
+import org.appcelerator.titanium.TiApplication;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.proxy.TiViewProxy;
 import org.appcelerator.titanium.util.TiColorHelper;
 import org.appcelerator.titanium.util.TiConvert;
+import org.appcelerator.titanium.util.TiUIHelper;
 import org.appcelerator.titanium.view.TiCompositeLayout;
+import org.appcelerator.titanium.view.TiCompositeLayout.LayoutArrangement;
 import org.appcelerator.titanium.view.TiUIView;
 
 import ti.modules.titanium.ui.TableViewProxy;
@@ -31,7 +34,6 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.StateListDrawable;
-import android.os.Build;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -45,7 +47,7 @@ import android.widget.ListView;
 
 public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeListener
 {
-	public static final int TI_TABLE_VIEW_ID = 101;
+	public static final int HEADER_FOOTER_WRAP_ID = View.generateViewId();
 	private static final String TAG = "TiTableView";
 
 	protected int maxClassname = 32;
@@ -69,11 +71,11 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 	private StateListDrawable selector;
 
 	public interface OnItemClickedListener {
-		public void onClick(KrollDict item);
+		void onClick(KrollDict item);
 	}
 
 	public interface OnItemLongClickedListener {
-		public boolean onLongClick(KrollDict item);
+		boolean onLongClick(KrollDict item);
 	}
 
 	class TTVListAdapter extends BaseAdapter
@@ -154,7 +156,7 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 
 		public Object getItem(int position)
 		{
-			if (position >= index.size()) {
+			if ((position < 0) || (position >= index.size())) {
 				return null;
 			}
 
@@ -186,63 +188,42 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 		 * IMPORTANT NOTE:
 		 * getView() is called by the Android framework whenever it needs a view.
 		 * The call to getView() could come on a measurement pass or on a layout
-		 * pass.  It's not possible to tell from the arguments whether the framework
-		 * is calling getView() for a measurement pass or for a layout pass.  Therefore,
+		 * pass. It's not possible to tell from the arguments whether the framework
+		 * is calling getView() for a measurement pass or for a layout pass. Therefore,
 		 * it is important that getView() and all methods call by getView() only create
 		 * the views and fill them in with the appropriate data.  What getView() and the
 		 * methods call by getView MUST NOT do is to make any associations between
-		 * proxies and views.   Those associations must be made only for the views
+		 * proxies and views. Those associations must be made only for the views
 		 *  that are used for layout, and should be driven from the onLayout() callback.
 		 */
 		public View getView(int position, View convertView, ViewGroup parent)
 		{
-			Item item = (Item) getItem(position);
 			TiBaseTableViewItem v = null;
 
-			if (convertView != null) {
-				v = (TiBaseTableViewItem) convertView;
-				// Default creates view for each Item
-				boolean sameView = false;
-				if (item.proxy instanceof TableViewRowProxy) {
-					TableViewRowProxy row = (TableViewRowProxy) item.proxy;
-					if (row.getTableViewRowProxyItem() != null) {
-						sameView = row.getTableViewRowProxyItem().equals(convertView);
-					}
-				}
+			// Fetch the indexed row item.
+			Item item = (Item) getItem(position);
+			if (item == null) {
+				Log.w(TAG, "getView() received invalid 'position' index: " + position);
+				v = new TiTableViewRowProxyItem(proxy.getActivity());
+				v.setClassName(TableViewProxy.CLASSNAME_NORMAL);
+				return v;
+			}
 
-				// TIMOB-24560: prevent duplicate TableViewRowProxyItem on Android N
-				if (Build.VERSION.SDK_INT > 23) {
-					ArrayList<Item> models = viewModel.getViewModel();
-					if (models != null && v instanceof TiTableViewRowProxyItem && models.contains(v.getRowData())) {
-						v = null;
-						sameView = true;
-					}
-				}
+			if (item.proxy instanceof TableViewRowProxy) {
+				TableViewRowProxy row = (TableViewRowProxy) item.proxy;
+				TiTableViewRowProxyItem rowItem = row.getTableViewRowProxyItem();
 
-				if (!sameView) {
-					if (v.getClassName().equals(TableViewProxy.CLASSNAME_DEFAULT)) {
-						if (v.getRowData() != item) {
-							v = null;
-						}
-					} else if (v.getClassName().equals(TableViewProxy.CLASSNAME_HEADERVIEW)) {
-						//Always recreate the header view
-						v = null;
-					} else {
-						// otherwise compare class names
-						if (!v.getClassName().equals(item.className)) {
-							Log.w(TAG,
-								  "Handed a view to convert with className " + v.getClassName() + " expected "
-									  + item.className,
-								  Log.DEBUG_MODE);
-							v = null;
-						}
-					}
+				// Attempt to reuse old view.
+				if (rowItem != null) {
+					v = rowItem.equals(convertView) ? (TiBaseTableViewItem) convertView : null;
 				}
 			}
+
+			// If we haven't created a view container for the given row item, then do so now.
 			if (v == null) {
 				if (item.className.equals(TableViewProxy.CLASSNAME_HEADERVIEW)) {
 					TiViewProxy vproxy = item.proxy;
-					TiUIView headerView = layoutHeaderOrFooter(vproxy);
+					TiUIView headerView = layoutSectionHeaderOrFooter(vproxy);
 					v = new TiTableViewHeaderItem(proxy.getActivity(), headerView);
 					v.setClassName(TableViewProxy.CLASSNAME_HEADERVIEW);
 					return v;
@@ -262,7 +243,11 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 				v.setLayoutParams(new AbsListView.LayoutParams(AbsListView.LayoutParams.MATCH_PARENT,
 															   AbsListView.LayoutParams.MATCH_PARENT));
 			}
+
+			// Copy the proxy's current settings to the row's views.
 			v.setRowData(item);
+
+			// Return the row view configured above.
 			return v;
 		}
 
@@ -321,7 +306,6 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 
 		this.viewModel = new TableViewModel(proxy);
 		this.listView = TiNestedListView.createUsing(getContext());
-		listView.setId(TI_TABLE_VIEW_ID);
 
 		listView.setFocusable(true);
 		listView.setFocusableInTouchMode(true);
@@ -385,13 +369,13 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 											  UIModule.TABLE_VIEW_SEPARATOR_STYLE_NONE));
 		}
 		adapter = new TTVListAdapter(viewModel);
-		if (proxy.hasProperty(TiC.PROPERTY_HEADER_VIEW)) {
+		if (proxy.hasPropertyAndNotNull(TiC.PROPERTY_HEADER_VIEW)) {
 			TiViewProxy view = (TiViewProxy) proxy.getProperty(TiC.PROPERTY_HEADER_VIEW);
-			listView.addHeaderView(layoutHeaderOrFooter(view).getOuterView(), null, false);
+			listView.addHeaderView(layoutTableHeaderOrFooter(view), null, false);
 		}
-		if (proxy.hasProperty(TiC.PROPERTY_FOOTER_VIEW)) {
+		if (proxy.hasPropertyAndNotNull(TiC.PROPERTY_FOOTER_VIEW)) {
 			TiViewProxy view = (TiViewProxy) proxy.getProperty(TiC.PROPERTY_FOOTER_VIEW);
-			listView.addFooterView(layoutHeaderOrFooter(view).getOuterView(), null, false);
+			listView.addFooterView(layoutTableHeaderOrFooter(view), null, false);
 		}
 
 		listView.setAdapter(adapter);
@@ -438,10 +422,10 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 
 	public void setHeaderView()
 	{
-		if (proxy.hasProperty(TiC.PROPERTY_HEADER_VIEW)) {
+		if (proxy.hasPropertyAndNotNull(TiC.PROPERTY_HEADER_VIEW)) {
 			listView.setAdapter(null);
 			TiViewProxy view = (TiViewProxy) proxy.getProperty(TiC.PROPERTY_HEADER_VIEW);
-			listView.addHeaderView(layoutHeaderOrFooter(view).getOuterView(), null, false);
+			listView.addHeaderView(layoutTableHeaderOrFooter(view), null, false);
 			listView.setAdapter(adapter);
 		}
 	}
@@ -457,10 +441,10 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 
 	public void setFooterView()
 	{
-		if (proxy.hasProperty(TiC.PROPERTY_FOOTER_VIEW)) {
+		if (proxy.hasPropertyAndNotNull(TiC.PROPERTY_FOOTER_VIEW)) {
 			listView.setAdapter(null);
 			TiViewProxy view = (TiViewProxy) proxy.getProperty(TiC.PROPERTY_FOOTER_VIEW);
-			listView.addFooterView(layoutHeaderOrFooter(view).getOuterView(), null, false);
+			listView.addFooterView(layoutTableHeaderOrFooter(view), null, false);
 			listView.setAdapter(adapter);
 		}
 	}
@@ -490,7 +474,7 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 
 	public Item getItemAtPosition(int position)
 	{
-		if (proxy.hasProperty(TiC.PROPERTY_HEADER_VIEW)) {
+		if (proxy.hasPropertyAndNotNull(TiC.PROPERTY_HEADER_VIEW)) {
 			position -= 1;
 		}
 		if (position == -1 || position == adapter.getCount()) {
@@ -501,11 +485,18 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 
 	public int getIndexFromXY(double x, double y)
 	{
+		// Coordinates received are in the measurement unit defined in tiapp.xml.
+		// Convert them to pixels in order to define the item clicked.
+		final double xInPixels = (double) TiUIHelper.getRawSize(
+			TiUIHelper.getSizeUnits(TiApplication.getInstance().getDefaultUnit()), (float) x, getContext());
+		final double yInPixels = (double) TiUIHelper.getRawSize(
+			TiUIHelper.getSizeUnits(TiApplication.getInstance().getDefaultUnit()), (float) y, getContext());
+
 		int bound = listView.getLastVisiblePosition() - listView.getFirstVisiblePosition();
 		for (int i = 0; i <= bound; i++) {
 			View child = listView.getChildAt(i);
-			if (child != null && x >= child.getLeft() && x <= child.getRight() && y >= child.getTop()
-				&& y <= child.getBottom()) {
+			if (child != null && xInPixels >= child.getLeft() && xInPixels <= child.getRight()
+				&& yInPixels >= child.getTop() && yInPixels <= child.getBottom()) {
 				return listView.getFirstVisiblePosition() + i;
 			}
 		}
@@ -543,7 +534,41 @@ public class TiTableView extends TiSwipeRefreshLayout implements OnSearchChangeL
 		}
 	}
 
-	private TiUIView layoutHeaderOrFooter(TiViewProxy viewProxy)
+	private View layoutTableHeaderOrFooter(TiViewProxy viewProxy)
+	{
+		TiUIView tiView = viewProxy.peekView();
+		if (tiView != null) {
+			TiViewProxy parentProxy = viewProxy.getParent();
+			// Remove parent view if possible
+			if (parentProxy != null) {
+				TiUIView parentView = parentProxy.peekView();
+				if (parentView != null) {
+					parentView.remove(tiView);
+				}
+			}
+		} else {
+			if ((proxy != null) && (proxy.getActivity() != null)) {
+				viewProxy.setActivity(proxy.getActivity());
+			}
+			tiView = viewProxy.forceCreateView();
+		}
+		View outerView = tiView.getOuterView();
+		ViewGroup parentView = (ViewGroup) outerView.getParent();
+		if (parentView != null && parentView.getId() == HEADER_FOOTER_WRAP_ID) {
+			return parentView;
+		} else {
+			TiCompositeLayout wrapper = new TiCompositeLayout(viewProxy.getActivity(), LayoutArrangement.DEFAULT, null);
+			AbsListView.LayoutParams params = new AbsListView.LayoutParams(AbsListView.LayoutParams.MATCH_PARENT,
+																		   AbsListView.LayoutParams.WRAP_CONTENT);
+			wrapper.setLayoutParams(params);
+			outerView = tiView.getOuterView();
+			wrapper.addView(outerView, tiView.getLayoutParams());
+			wrapper.setId(HEADER_FOOTER_WRAP_ID);
+			return wrapper;
+		}
+	}
+
+	private TiUIView layoutSectionHeaderOrFooter(TiViewProxy viewProxy)
 	{
 		//We are always going to create a new view here. So detach outer view here and recreate
 		View outerView = (viewProxy.peekView() == null) ? null : viewProxy.peekView().getOuterView();

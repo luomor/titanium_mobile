@@ -5,34 +5,43 @@
  * Please see the LICENSE included with this distribution for details.
  */
 /* eslint-env mocha */
-/* global Ti */
 /* eslint no-unused-expressions: "off" */
 'use strict';
-var should = require('./utilities/assertions');
+const should = require('./utilities/assertions');
 
 describe('Titanium.UI.ListView', function () {
-	var didFocus = false;
 	this.timeout(6e4);
 
-	beforeEach(function () {
-		didFocus = false;
+	let win;
+	afterEach(done => { // fires after every test in sub-suites too...
+		if (win && !win.closed) {
+			win.addEventListener('close', function listener () {
+				win.removeEventListener('close', listener);
+				win = null;
+				done();
+			});
+			win.close();
+		} else {
+			win = null;
+			done();
+		}
 	});
 
-	it('Ti.UI.ListView', function () {
-		should(Ti.UI.ListView).not.be.undefined;
+	it.iosBroken('Ti.UI.ListView', () => { // Should this be defined?
+		should(Ti.UI.ListView).not.be.undefined();
 	});
 
-	it('apiName', function () {
-		var listView = Ti.UI.createListView();
-		should(listView).have.readOnlyProperty('apiName').which.is.a.String;
+	it('.apiName', function () {
+		const listView = Ti.UI.createListView();
+		should(listView).have.readOnlyProperty('apiName').which.is.a.String();
 		should(listView.apiName).be.eql('Ti.UI.ListView');
 	});
 
-	it.windowsMissing('canScroll', function () {
-		var listView = Ti.UI.createListView({ canScroll: false });
+	it.windowsMissing('.canScroll', function () {
+		const listView = Ti.UI.createListView({ canScroll: false });
 		should(listView.canScroll).be.eql(false);
 		should(listView.getCanScroll()).be.eql(false);
-		listView.canScroll = !listView.canScroll
+		listView.canScroll = !listView.canScroll;
 		should(listView.canScroll).be.eql(true);
 		should(listView.getCanScroll()).be.eql(true);
 		listView.setCanScroll(!listView.getCanScroll());
@@ -48,16 +57,16 @@ describe('Titanium.UI.ListView', function () {
 			section_1,
 			section_1_set;
 		// Validate createListView()
-		should(Ti.UI.createListView).not.be.undefined;
-		should(Ti.UI.createListView).be.a.Function;
+		should(Ti.UI.createListView).not.be.undefined();
+		should(Ti.UI.createListView).be.a.Function();
 
 		// Create ListView
 		listView = Ti.UI.createListView();
-		should(listView).be.a.Object;
+		should(listView).be.a.Object();
 
 		// Create list section
 		section_0 = Ti.UI.createListSection({ headerTitle: 'Zero' });
-		should(section_0).be.a.Object;
+		should(section_0).be.a.Object();
 
 		// Set section items
 		section_0_set = [
@@ -75,7 +84,7 @@ describe('Titanium.UI.ListView', function () {
 
 		// Create list section
 		section_1 = Ti.UI.createListSection({ headerTitle: 'One' });
-		should(section_1).be.a.Object;
+		should(section_1).be.a.Object();
 
 		// Set section items
 		section_1_set = [
@@ -103,12 +112,12 @@ describe('Titanium.UI.ListView', function () {
 	// Making sure setting header & footer doesn't throw exception
 	//
 	it('section header & footer', function (finish) {
-		var win = Ti.UI.createWindow({ backgroundColor: 'green' }),
-			listView = Ti.UI.createListView(),
+		var listView = Ti.UI.createListView(),
 			ukHeaderView = Ti.UI.createView({ backgroundColor: 'black', height: 42 }),
 			ukFooterView = Ti.UI.createView({ backgroundColor: 'black', height: 42 }),
 			ukSection = Ti.UI.createListSection({ headerView: ukHeaderView, footerView: ukFooterView }),
 			usSection = Ti.UI.createListSection({ headerTitle: 'English US Header', footerTitle: 'English US Footer' });
+		win = Ti.UI.createWindow({ backgroundColor: 'green' });
 
 		ukHeaderView.add(Ti.UI.createLabel({ text: 'English UK Header', color: 'white' }));
 		ukFooterView.add(Ti.UI.createLabel({ text: 'English UK Footer', color: 'white' }));
@@ -127,13 +136,6 @@ describe('Titanium.UI.ListView', function () {
 		listView.appendSection(usSection);
 
 		win.addEventListener('focus', function () {
-			var error;
-
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
 				should(listView.sectionCount).be.eql(2);
 				should(listView.sections[0].items.length).be.eql(3);
@@ -145,13 +147,9 @@ describe('Titanium.UI.ListView', function () {
 				should(listView.sections[1].items[1].properties.title).be.eql('Truck');
 				should(listView.sections[1].items[2].properties.title).be.eql('Freeway');
 			} catch (err) {
-				error = err;
+				return finish(err);
 			}
-
-			setTimeout(function () {
-				win.close();
-				finish(error);
-			}, 1000);
+			finish();
 		});
 
 		win.add(listView);
@@ -162,8 +160,7 @@ describe('Titanium.UI.ListView', function () {
 	// Making sure setting header & footer doesn't mess up section items
 	//
 	it('headerView', function (finish) {
-		var win = Ti.UI.createWindow({ backgroundColor: 'green' }),
-			listView = Ti.UI.createListView(),
+		var listView = Ti.UI.createListView(),
 			sections = [],
 			fruitSection = Ti.UI.createListSection({ headerTitle: 'Fruits' }),
 			fruitDataSet = [
@@ -172,6 +169,7 @@ describe('Titanium.UI.ListView', function () {
 			],
 			vegSection,
 			vegDataSet;
+		win = Ti.UI.createWindow({ backgroundColor: 'green' });
 		fruitSection.setItems(fruitDataSet);
 		fruitSection.headerView = Ti.UI.createView({ backgroundColor: 'black', height: 42 });
 		fruitSection.footerView = Ti.UI.createView({ backgroundColor: 'black', height: 42 });
@@ -191,13 +189,6 @@ describe('Titanium.UI.ListView', function () {
 		listView.sections = sections;
 
 		win.addEventListener('focus', function () {
-			var error;
-
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
 				should(listView.sectionCount).be.eql(2);
 				should(listView.sections[0].items.length).be.eql(2);
@@ -207,13 +198,9 @@ describe('Titanium.UI.ListView', function () {
 				should(listView.sections[1].items[0].properties.title).be.eql('Carrots');
 				should(listView.sections[1].items[1].properties.title).be.eql('Potatoes');
 			} catch (err) {
-				error = err;
+				return finish(err);
 			}
-
-			setTimeout(function () {
-				win.close();
-				finish(error);
-			}, 1000);
+			finish();
 		});
 
 		win.add(listView);
@@ -224,8 +211,7 @@ describe('Titanium.UI.ListView', function () {
 	// Making sure custom template doesn't throw exception
 	// FIXME Windows desktop crashes on this test
 	it.windowsDesktopBroken('Custom template', function (finish) {
-		var win = Ti.UI.createWindow({ backgroundColor: 'green' }),
-			myTemplate = {
+		var myTemplate = {
 				childTemplates: [
 					{
 						type: 'Ti.UI.ImageView',
@@ -255,7 +241,7 @@ describe('Titanium.UI.ListView', function () {
 				]
 			},
 			listView = Ti.UI.createListView({
-				templates: { 'template': myTemplate },
+				templates: { template: myTemplate },
 				defaultItemTemplate: 'template'
 			}),
 			sections = [],
@@ -265,6 +251,7 @@ describe('Titanium.UI.ListView', function () {
 			vegDataSet,
 			grainSection,
 			grainDataSet;
+		win = Ti.UI.createWindow({ backgroundColor: 'green' });
 
 		fruitSection = Ti.UI.createListSection({ headerTitle: 'Fruits / Frutas' });
 		fruitDataSet = [
@@ -293,13 +280,6 @@ describe('Titanium.UI.ListView', function () {
 		listView.setSections(sections);
 
 		win.addEventListener('focus', function () {
-			var error;
-
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
 				should(listView.sectionCount).be.eql(3);
 				should(listView.sections[0].items.length).be.eql(2);
@@ -312,13 +292,9 @@ describe('Titanium.UI.ListView', function () {
 				should(listView.sections[2].items[0].info.text).be.eql('Corn');
 				should(listView.sections[2].items[1].info.text).be.eql('Rice');
 			} catch (err) {
-				error = err;
+				return finish(err);
 			}
-
-			setTimeout(function () {
-				win.close();
-				finish(error);
-			}, 1000);
+			finish();
 		});
 
 		win.add(listView);
@@ -326,8 +302,7 @@ describe('Titanium.UI.ListView', function () {
 	});
 
 	it('appendSection', function (finish) {
-		var win = Ti.UI.createWindow({ backgroundColor: 'green' }),
-			listView = Ti.UI.createListView(),
+		var listView = Ti.UI.createListView(),
 			fruitSection,
 			fruitDataSet,
 			vegSection,
@@ -335,6 +310,7 @@ describe('Titanium.UI.ListView', function () {
 			fishSection,
 			fishDataSet;
 
+		win = Ti.UI.createWindow({ backgroundColor: 'green' });
 		fruitSection = Ti.UI.createListSection({ headerTitle: 'Fruits' });
 		fruitDataSet = [
 			{ properties: { title: 'Apple' } },
@@ -359,13 +335,6 @@ describe('Titanium.UI.ListView', function () {
 		listView.sections = [ fruitSection ];
 
 		win.addEventListener('focus', function () {
-			var error;
-
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
 				should(listView.sectionCount).be.eql(1);
 				should(listView.sections[0].items.length).be.eql(2);
@@ -386,13 +355,9 @@ describe('Titanium.UI.ListView', function () {
 				should(listView.sections[2].items[0].properties.title).be.eql('Cod');
 				should(listView.sections[2].items[1].properties.title).be.eql('Haddock');
 			} catch (err) {
-				error = err;
+				return finish(err);
 			}
-
-			setTimeout(function () {
-				win.close();
-				finish(error);
-			}, 1000);
+			finish();
 		});
 
 		win.add(listView);
@@ -400,14 +365,15 @@ describe('Titanium.UI.ListView', function () {
 	});
 
 	it('insertSectionAt', function (finish) {
-		var win = Ti.UI.createWindow({ backgroundColor: 'green' }),
-			listView = Ti.UI.createListView(),
+		var listView = Ti.UI.createListView(),
 			fruitSection,
 			fruitDataSet,
 			vegSection,
 			vegDataSet,
 			fishSection,
 			fishDataSet;
+
+		win = Ti.UI.createWindow({ backgroundColor: 'green' });
 
 		fruitSection = Ti.UI.createListSection({ headerTitle: 'Fruits' });
 		fruitDataSet = [
@@ -433,13 +399,6 @@ describe('Titanium.UI.ListView', function () {
 		listView.sections = [ fruitSection, fishSection ];
 
 		win.addEventListener('focus', function () {
-			var error;
-
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
 				should(listView.sectionCount).be.eql(2);
 				should(listView.sections[0].items.length).be.eql(2);
@@ -456,13 +415,9 @@ describe('Titanium.UI.ListView', function () {
 				should(listView.sections[1].items[0].properties.title).be.eql('Apple');
 				should(listView.sections[1].items[1].properties.title).be.eql('Banana');
 			} catch (err) {
-				error = err;
+				return finish(err);
 			}
-
-			setTimeout(function () {
-				win.close();
-				finish(error);
-			}, 1000);
+			finish();
 		});
 
 		win.add(listView);
@@ -470,8 +425,7 @@ describe('Titanium.UI.ListView', function () {
 	});
 
 	it('replaceSectionAt', function (finish) {
-		var win = Ti.UI.createWindow({ backgroundColor: 'green' }),
-			listView = Ti.UI.createListView(),
+		var listView = Ti.UI.createListView(),
 			fruitSection,
 			fruitDataSet,
 			vegSection,
@@ -479,6 +433,7 @@ describe('Titanium.UI.ListView', function () {
 			fishSection,
 			fishDataSet;
 
+		win = Ti.UI.createWindow({ backgroundColor: 'green' });
 		fruitSection = Ti.UI.createListSection({ headerTitle: 'Fruits' });
 		fruitDataSet = [
 			{ properties: { title: 'Apple' } },
@@ -503,13 +458,6 @@ describe('Titanium.UI.ListView', function () {
 		listView.sections = [ fruitSection, vegSection ];
 
 		win.addEventListener('focus', function () {
-			var error;
-
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
 				should(listView.sectionCount).be.eql(2);
 				should(listView.sections[0].items.length).be.eql(2);
@@ -529,13 +477,9 @@ describe('Titanium.UI.ListView', function () {
 				should(listView.sections[1].items[0].properties.title).be.eql('Cod');
 				should(listView.sections[1].items[1].properties.title).be.eql('Haddock');
 			} catch (err) {
-				error = err;
+				return finish(err);
 			}
-
-			setTimeout(function () {
-				win.close();
-				finish(error);
-			}, 1000);
+			finish();
 		});
 
 		win.add(listView);
@@ -543,8 +487,7 @@ describe('Titanium.UI.ListView', function () {
 	});
 
 	it('deleteSectionAt', function (finish) {
-		var win = Ti.UI.createWindow({ backgroundColor: 'green' }),
-			listView = Ti.UI.createListView(),
+		var listView = Ti.UI.createListView(),
 			fruitSection,
 			fruitDataSet,
 			vegSection,
@@ -552,6 +495,7 @@ describe('Titanium.UI.ListView', function () {
 			fishSection,
 			fishDataSet;
 
+		win = Ti.UI.createWindow({ backgroundColor: 'green' });
 		fruitSection = Ti.UI.createListSection({ headerTitle: 'Fruits' });
 		fruitDataSet = [
 			{ properties: { title: 'Apple' } },
@@ -576,13 +520,6 @@ describe('Titanium.UI.ListView', function () {
 		listView.sections = [ fruitSection, vegSection, fishSection ];
 
 		win.addEventListener('focus', function () {
-			var error;
-
-			if (didFocus) {
-				return;
-			}
-			didFocus = true;
-
 			try {
 				should(listView.sectionCount).be.eql(3);
 				should(listView.sections[0].items.length).be.eql(2);
@@ -605,13 +542,9 @@ describe('Titanium.UI.ListView', function () {
 				should(listView.sections[1].items[0].properties.title).be.eql('Cod');
 				should(listView.sections[1].items[1].properties.title).be.eql('Haddock');
 			} catch (err) {
-				error = err;
+				return finish(err);
 			}
-
-			setTimeout(function () {
-				win.close();
-				finish(error);
-			}, 1000);
+			finish();
 		});
 
 		win.add(listView);
@@ -620,8 +553,7 @@ describe('Titanium.UI.ListView', function () {
 
 	// Since the tested API is iOS only, we will skip all other platforms
 	it.ios('ListItem.properties', function () {
-		var win = Ti.UI.createWindow(),
-			list = Ti.UI.createListView({
+		var list = Ti.UI.createListView({
 				sections: [ Ti.UI.createListSection({
 					items: [ {
 						template: Ti.UI.LIST_ITEM_TEMPLATE_CONTACTS,
@@ -640,6 +572,7 @@ describe('Titanium.UI.ListView', function () {
 			template,
 			properties;
 
+		win = Ti.UI.createWindow();
 		win.add(list);
 		win.open();
 
@@ -650,8 +583,8 @@ describe('Titanium.UI.ListView', function () {
 
 		// Validate items
 		items = section.items;
-		should(items).be.an.Array;
-		should(items.length).be.a.Number;
+		should(items).be.an.Array();
+		should(items.length).be.a.Number();
 		should(items.length).be.eql(1);
 
 		// Validate single item
@@ -660,35 +593,35 @@ describe('Titanium.UI.ListView', function () {
 		properties = item.properties;
 
 		// Validate item template
-		should(item.hasOwnProperty('template')).be.true;
-		should(template).not.be.undefined;
-		should(template).be.a.Number;
+		should(item).have.ownProperty('template');
+		should(template).not.be.undefined();
+		should(template).be.a.Number();
 		should(template).eql(Ti.UI.LIST_ITEM_TEMPLATE_CONTACTS);
 
 		// Validate item properties
-		should(item.hasOwnProperty('properties')).be.true;
-		should(properties).not.be.undefined;
-		should(properties).be.an.Object;
+		should(item).have.ownProperty('properties');
+		should(properties).not.be.undefined();
+		should(properties).be.an.Object();
 
 		// Validate properties subtitleColor and selectedSubtitleColor
-		should(properties.hasOwnProperty('subtitleColor')).be.true;
-		should(properties.subtitleColor).be.a.String;
+		should(properties).have.ownProperty('subtitleColor');
+		should(properties.subtitleColor).be.a.String();
 		should(properties.subtitleColor).be.eql('red');
-		should(properties.hasOwnProperty('selectedSubtitleColor')).be.true;
-		should(properties.selectedSubtitleColor).be.a.String;
+		should(properties).have.ownProperty('selectedSubtitleColor');
+		should(properties.selectedSubtitleColor).be.a.String();
 		should(properties.selectedSubtitleColor).be.eql('green');
 
 		// Validate properties title & subtitle
-		should(properties.hasOwnProperty('title')).be.true;
-		should(properties.title).be.a.String;
+		should(properties).have.ownProperty('title');
+		should(properties.title).be.a.String();
 		should(properties.title).be.eql('My Title');
-		should(properties.hasOwnProperty('subtitle')).be.true;
-		should(properties.subtitle).be.a.String;
+		should(properties).have.ownProperty('subtitle');
+		should(properties.subtitle).be.a.String();
 		should(properties.subtitle).be.eql('My Subtitle');
 	});
 
 	// Crashes Windows 10 Desktop
-	it.windowsDesktopBroken('fireListSectionEvent', function (finish) {
+	it.windowsDesktopBroken('fireListSectionEvent', function () {
 		var section = Ti.UI.createListSection({
 				items: [
 					{ properties: { title: 'B' } },
@@ -729,12 +662,10 @@ describe('Titanium.UI.ListView', function () {
 			item = items[i].properties.title;
 			should(item).be.eql(validation[i]);
 		}
-
-		finish();
 	});
 
 	// Crashes Windows 10 Desktop
-	it.windowsDesktopBroken('fireListSectionEvent (header and footer)', function (finish) {
+	it.windowsDesktopBroken('fireListSectionEvent (header and footer)', function () {
 		var section = Ti.UI.createListSection({
 				headerTitle: 'HEADER',
 				footerTitle: 'FOOTER',
@@ -777,19 +708,18 @@ describe('Titanium.UI.ListView', function () {
 			item = items[i].properties.title;
 			should(item).be.eql(validation[i]);
 		}
-
-		finish();
 	});
 
 	// Making sure sections data is saved even when it's filtered (TIMOB-24019)
 	// Crashes Windows 10 Desktop
 	it.windowsDesktopBroken('TIMOB-24019', function (finish) {
-		var win = Ti.UI.createWindow({ backgroundColor: 'green' }),
-			listView = Ti.UI.createListView({ width: Ti.UI.FILL, height: Ti.UI.FILL, caseInsensitiveSearch: true }),
+		var listView = Ti.UI.createListView({ width: Ti.UI.FILL, height: Ti.UI.FILL, caseInsensitiveSearch: true }),
 			fruitSection,
 			fruitDataSet,
 			vegSection,
 			vegDataSet;
+
+		win = Ti.UI.createWindow({ backgroundColor: 'green' });
 
 		fruitSection = Ti.UI.createListSection({ headerTitle: 'Fruits' });
 		fruitDataSet = [
@@ -820,16 +750,19 @@ describe('Titanium.UI.ListView', function () {
 			listView.searchText = 'p';
 
 			setTimeout(function () {
-				// Make sure ListView reserves original data
-				should(listView.sectionCount).be.eql(2);
-				should(listView.sections[0].items.length).be.eql(2);
-				should(listView.sections[0].items[0].properties.title).be.eql('Apple');
-				should(listView.sections[0].items[1].properties.title).be.eql('Banana');
-				should(listView.sections[1].items.length).be.eql(2);
-				should(listView.sections[1].items[0].properties.title).be.eql('Carrots');
-				should(listView.sections[1].items[1].properties.title).be.eql('Potatoes');
+				try {
+					// Make sure ListView reserves original data
+					should(listView.sectionCount).be.eql(2);
+					should(listView.sections[0].items.length).be.eql(2);
+					should(listView.sections[0].items[0].properties.title).be.eql('Apple');
+					should(listView.sections[0].items[1].properties.title).be.eql('Banana');
+					should(listView.sections[1].items.length).be.eql(2);
+					should(listView.sections[1].items[0].properties.title).be.eql('Carrots');
+					should(listView.sections[1].items[1].properties.title).be.eql('Potatoes');
+				} catch (err) {
+					return finish(err);
+				}
 
-				win.close();
 				finish();
 			}, 2000);
 		});
@@ -839,10 +772,8 @@ describe('Titanium.UI.ListView', function () {
 	});
 
 	// iOS-only properties
-	it.ios('ListView.getSelectedRows', function () {
-		var win = Ti.UI.createWindow();
-
-		var list = Ti.UI.createListView({
+	it.ios('ListView.getSelectedRows', function (finish) {
+		const list = Ti.UI.createListView({
 			sections: [ Ti.UI.createListSection({
 				items: [ {
 					properties: {
@@ -855,25 +786,30 @@ describe('Titanium.UI.ListView', function () {
 				} ]
 			}) ]
 		});
+
+		win = Ti.UI.createWindow();
 		win.addEventListener('open', function () {
-			list.selectItem(0, 1);
-			should(list.selectedItems[0].section).be.eql(list.sections[0]);
-			should(list.selectedItems[0].sectionIndex).be.eql(0);
-			should(list.selectedItems[0].itemIndex).be.eql(1);
-			list.selectItem(0, 0);
-			should(list.selectedItems[0].section).be.eql(list.sections[0]);
-			should(list.selectedItems[0].sectionIndex).be.eql(0);
-			should(list.selectedItems[0].itemIndex).be.eql(0);
+			try {
+				list.selectItem(0, 1);
+				should(list.selectedItems[0].section).be.eql(list.sections[0]);
+				should(list.selectedItems[0].sectionIndex).be.eql(0);
+				should(list.selectedItems[0].itemIndex).be.eql(1);
+				list.selectItem(0, 0);
+				should(list.selectedItems[0].section).be.eql(list.sections[0]);
+				should(list.selectedItems[0].sectionIndex).be.eql(0);
+				should(list.selectedItems[0].itemIndex).be.eql(0);
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
 		});
 		win.add(list);
 		win.open();
 	});
 
 	// iOS-only properties
-	it.ios('ListView.getSelectedRows', function () {
-		var win = Ti.UI.createWindow();
-
-		var list = Ti.UI.createListView({
+	it.ios('ListView.getSelectedRows', function (finish) {
+		const list = Ti.UI.createListView({
 			allowsMultipleSelectionDuringEditing: true,
 			sections: [ Ti.UI.createListSection({
 				items: [ {
@@ -887,18 +823,144 @@ describe('Titanium.UI.ListView', function () {
 				} ]
 			}) ]
 		});
-		win.addEventListener('open', function () {
-			should(list.allowsMultipleSelectionDuringEditing).be.eql(true);
-			should(list.getAllowsMultipleSelectionDuringEditing()).be.eql(true);
 
-			list.allowsMultipleSelectionDuringEditing = false;
-			should(list.allowsMultipleSelectionDuringEditing).be.eql(false);
-			should(list.getAllowsMultipleSelectionDuringEditing()).be.eql(false);
-			list.setAllowsMultipleSelectionDuringEditing(true);
-			should(list.allowsMultipleSelectionDuringEditing).be.eql(true);
-			should(list.getAllowsMultipleSelectionDuringEditing()).be.eql(true);
+		win = Ti.UI.createWindow();
+		win.addEventListener('open', function () {
+			try {
+				should(list.allowsMultipleSelectionDuringEditing).be.eql(true);
+				should(list.getAllowsMultipleSelectionDuringEditing()).be.eql(true);
+
+				list.allowsMultipleSelectionDuringEditing = false;
+				should(list.allowsMultipleSelectionDuringEditing).be.eql(false);
+				should(list.getAllowsMultipleSelectionDuringEditing()).be.eql(false);
+				list.setAllowsMultipleSelectionDuringEditing(true);
+				should(list.allowsMultipleSelectionDuringEditing).be.eql(true);
+				should(list.getAllowsMultipleSelectionDuringEditing()).be.eql(true);
+			} catch (err) {
+				return finish(err);
+			}
+			finish();
 		});
 		win.add(list);
 		win.open();
+	});
+
+	it.androidAndWindowsMissing('.refreshControl (in NavigationWindow)', function (finish) {
+		const window = Ti.UI.createWindow({
+			title: 'Hello World',
+			largeTitleEnabled: true,
+			extendEdges: [ Ti.UI.EXTEND_EDGE_ALL ]
+		});
+
+		window.addEventListener('open', function () {
+			control.beginRefreshing();
+		});
+
+		const nav = Ti.UI.iOS.createNavigationWindow({
+			window: window
+		});
+
+		const control = Ti.UI.createRefreshControl();
+
+		const listView = Ti.UI.createListView({
+			refreshControl: control
+		});
+
+		control.addEventListener('refreshstart', function () {
+			setTimeout(function () {
+				control.endRefreshing();
+			}, 2000);
+		});
+
+		control.addEventListener('refreshend', function () {
+			nav.close();
+			finish();
+		});
+
+		window.add(listView);
+		nav.open();
+	});
+
+	it.windowsMissing('.refreshControl (Basic)', function (finish) {
+		win = Ti.UI.createWindow();
+
+		win.addEventListener('open', function () {
+			control.beginRefreshing();
+		});
+
+		const control = Ti.UI.createRefreshControl();
+
+		const listView = Ti.UI.createListView({
+			refreshControl: control
+		});
+
+		control.addEventListener('refreshstart', function () {
+			setTimeout(function () {
+				control.endRefreshing();
+			}, 2000);
+		});
+
+		control.addEventListener('refreshend', function () {
+			finish();
+		});
+
+		win.add(listView);
+		win.open();
+	});
+
+	it.android('listView with Ti.UI.Android.CardView', function (finish) {
+		win = Ti.UI.createWindow({
+			backgroundColor: 'gray'
+		});
+		const listView = Ti.UI.createListView({
+				templates: {
+					test: {
+						childTemplates: [ {
+							type: 'Ti.UI.Android.CardView',
+							childTemplates: [ {
+								type: 'Ti.UI.Label',
+								bindId: 'label',
+								properties: {
+									color: 'black',
+									bindId: 'label'
+								}
+							} ],
+							properties: {
+								width: Ti.UI.FILL,
+								height: Ti.UI.SIZE,
+								cardUseCompatPadding: true,
+								backgroundColor: 'white',
+								layout: 'vertical'
+							}
+						} ]
+					}
+				},
+				defaultItemTemplate: 'test'
+			}),
+			section = Ti.UI.createListSection(),
+			items = [];
+
+		[ 'A', 'B', 'C' ].forEach(item => items.push({
+			label: { text: item },
+			template: 'test'
+		}));
+
+		section.setItems(items);
+		listView.setSections([ section ]);
+
+		// should not crash after drawing listView
+		win.addEventListener('postlayout', function listener () {
+			win.removeEventListener('postlayout', listener);
+			finish();
+		});
+
+		win.add(listView);
+		win.open();
+	});
+
+	it.android('.fastScroll', function () {
+		const listView = Ti.UI.createListView();
+		should(listView.fastScroll).be.eql(false);
+		should(listView.setFastScroll).be.a.Function();
 	});
 });

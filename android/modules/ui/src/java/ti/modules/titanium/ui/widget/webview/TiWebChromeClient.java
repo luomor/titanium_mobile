@@ -6,24 +6,6 @@
  */
 package ti.modules.titanium.ui.widget.webview;
 
-import java.io.File;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-
-import org.appcelerator.kroll.KrollFunction;
-import org.appcelerator.kroll.KrollObject;
-import org.appcelerator.kroll.common.Log;
-import org.appcelerator.titanium.TiApplication;
-import org.appcelerator.titanium.TiBaseActivity;
-import org.appcelerator.titanium.TiC;
-import org.appcelerator.titanium.proxy.ActivityProxy;
-import org.appcelerator.titanium.proxy.IntentProxy;
-import org.appcelerator.titanium.proxy.TiViewProxy;
-import org.appcelerator.titanium.util.TiUIHelper;
-
-import ti.modules.titanium.ui.WebViewProxy;
 import android.app.Activity;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnClickListener;
@@ -43,6 +25,23 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebStorage.QuotaUpdater;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import org.appcelerator.kroll.KrollDict;
+import org.appcelerator.kroll.KrollFunction;
+import org.appcelerator.kroll.KrollObject;
+import org.appcelerator.kroll.common.Log;
+import org.appcelerator.titanium.TiApplication;
+import org.appcelerator.titanium.TiBaseActivity;
+import org.appcelerator.titanium.TiC;
+import org.appcelerator.titanium.proxy.ActivityProxy;
+import org.appcelerator.titanium.proxy.IntentProxy;
+import org.appcelerator.titanium.proxy.TiViewProxy;
+import org.appcelerator.titanium.util.TiUIHelper;
+import ti.modules.titanium.ui.WebViewProxy;
 
 @SuppressWarnings("deprecation")
 public class TiWebChromeClient extends WebChromeClient
@@ -99,6 +98,17 @@ public class TiWebChromeClient extends WebChromeClient
 		return true;
 	}
 
+	public void onProgressChanged(WebView view, int progress)
+	{
+		WebViewProxy proxy = (WebViewProxy) tiWebView.getProxy();
+		if (proxy != null) {
+			KrollDict data = new KrollDict();
+			data.put(TiC.PROPERTY_VALUE, (double) progress / 100.0d); // docs state 0.0 to 1.0
+			data.put(TiC.EVENT_PROPERTY_URL, proxy.getProperty(TiC.PROPERTY_URL));
+			proxy.fireEvent("progress", data);
+		}
+	}
+
 	// This exposes onCreateWindow to JS with a similar API to Android:
 	// If the end-developer sets the 'onCreateWindow' property of the WebViewProxy
 	// to a callback function, then it gets executed when a new window is created
@@ -109,7 +119,7 @@ public class TiWebChromeClient extends WebChromeClient
 	@Override
 	public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg)
 	{
-		TiViewProxy proxy = tiWebView.getProxy();
+		WebViewProxy proxy = (WebViewProxy) tiWebView.getProxy();
 		if (proxy == null) {
 			return false;
 		}
@@ -117,6 +127,21 @@ public class TiWebChromeClient extends WebChromeClient
 		Object onCreateWindow = proxy.getProperty(TiC.PROPERTY_ON_CREATE_WINDOW);
 		if (!(onCreateWindow instanceof KrollFunction)) {
 			return false;
+		}
+
+		Message href = view.getHandler().obtainMessage();
+		view.requestFocusNodeHref(href);
+		String url = href.getData().getString("url");
+
+		Object onLink = proxy.getProperty(TiC.PROPERTY_ON_LINK);
+		if (onLink instanceof KrollFunction) {
+			KrollFunction onLinkFunction = (KrollFunction) onLink;
+			KrollDict args = new KrollDict();
+			args.put(TiC.EVENT_PROPERTY_URL, url);
+			Object result = onLinkFunction.call(proxy.getKrollObject(), args);
+			if (result == null || (result instanceof Boolean && ((Boolean) result) == false)) {
+				return false;
+			}
 		}
 
 		KrollFunction onCreateWindowFunction = (KrollFunction) onCreateWindow;
@@ -128,6 +153,7 @@ public class TiWebChromeClient extends WebChromeClient
 		if (result instanceof WebViewProxy) {
 			WebViewProxy newProxy = (WebViewProxy) result;
 			newProxy.setPostCreateMessage(resultMsg);
+			newProxy.getWebView().setProxy(proxy);
 			return true;
 		}
 
@@ -263,7 +289,7 @@ public class TiWebChromeClient extends WebChromeClient
 
 		Intent contentSelectionIntent = new Intent(Intent.ACTION_GET_CONTENT);
 		contentSelectionIntent.addCategory(Intent.CATEGORY_OPENABLE);
-		contentSelectionIntent.setType("image/*");
+		contentSelectionIntent.setType("*/*");
 
 		Intent[] intentArray = null;
 		if (takePictureIntent != null) {

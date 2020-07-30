@@ -1,110 +1,197 @@
 #!groovy
 library 'pipeline-library'
 
-// Keep logs/reports/etc of last 15 builds, only keep build artifacts of last 3 builds
-properties([buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '3'))])
+// Keep logs/reports/etc of last 30 builds, only keep build artifacts of last 3 builds
+properties([buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '3'))])
+
+// Some branch flags to alter behavior
+def isPR = env.CHANGE_ID || false // CHANGE_ID is set if this is a PR. (We used to look whether branch name started with PR-, which would not be true for a branch from origin filed as PR)
+def MAINLINE_BRANCH_REGEXP = /master|next|\d_\d_(X|\d)/ // a branch is considered mainline if 'master' or like: 6_2_X, 7_0_X, 6_2_1
+def isMainlineBranch = (env.BRANCH_NAME ==~ MAINLINE_BRANCH_REGEXP)
+
+// These values could be changed manually on PRs/branches, but be careful we don't merge the changes in. We want this to be the default behavior for now!
+// target branch of test suite to test with
+def runDanger = isPR // run Danger.JS if it's a PR by default. (should we also run on origin branches that aren't mainline?)
+def publishToS3 = isMainlineBranch // publish zips to S3 if on mainline branch, by default
+def testOnDevices = isMainlineBranch // run tests on devices
+
+// Variables we can change
+def nodeVersion = '10.17.0' // NOTE that changing this requires we set up the desired version on jenkins master first!
+def npmVersion = 'latest' // We can change this without any changes to Jenkins. 5.7.1 is minimum to use 'npm ci'
 
 // Variables which we assign and share between nodes
-// Don't modify these yourself
+// Don't modify these yourself, these are generated during the build
 def gitCommit = ''
 def basename = ''
 def vtag = ''
-def isPR = false
-def MAINLINE_BRANCH_REGEXP = /master|\d_\d_(X|\d)/ // a branch is considered mainline if 'master' or like: 6_2_X, 7_0_X, 6_2_1
-def isMainlineBranch = true // used to determine if we should publish to S3 (and include branch in main listing)
-def isFirstBuildOnBranch = false // calculated by looking at S3's branches.json
 
-// Variables we can change
-def nodeVersion = '8.9.1' // NOTE that changing this requires we set up the desired version on jenkins master first!
-def npmVersion = '5.6.0' // We can change this without any changes to Jenkins.
-
-def unitTests(os, nodeVersion, testSuiteBranch) {
-	return {
-		def labels = 'git && osx'
-		if ('ios'.equals(os)) {
-			labels = 'git && osx && xcode-9' // test app fails to build with xcode-8.1 as far as I can tell
-		} else {
-			labels = 'git && osx && android-emulator && android-sdk' // FIXME get working on windows/linux!
-		}
-		node(labels) {
-			timeout(20) {
-				// Unarchive the osx build of the SDK (as a zip)
-				sh 'rm -rf osx.zip' // delete osx.zip file if it already exists
-				unarchive mapping: ['dist/mobilesdk-*-osx.zip': 'osx.zip'] // grab the osx zip from our current build
-				def zipName = sh(returnStdout: true, script: 'ls osx.zip/dist/mobilesdk-*-osx.zip').trim()
-				// if our test suite already exists, delete it...
-				sh 'rm -rf titanium-mobile-mocha-suite'
-				// clone the tests suite fresh
-				// FIXME Clone once on initial node and use stash/unstash to ensure all OSes use exact same checkout revision
-				dir('titanium-mobile-mocha-suite') {
-					// TODO Do a shallow clone, using same credentials as from scm object
-					try {
-						git changelog: false, poll: false, credentialsId: 'd05dad3c-d7f9-4c65-9cb6-19fef98fc440', url: 'https://github.com/appcelerator/titanium-mobile-mocha-suite.git', branch: testSuiteBranch
-					} catch (e) {
-						def msg = "Failed to clone the titanium-mobile-mocha-suite test suite from branch ${testSuiteBranch}. Are you certain that the test suite repo has that branch created?"
-						echo msg
-						manager.addWarningBadge(msg)
-						throw e
-					}
+@NonCPS
+def hasAPIDocChanges() {
+	// https://javadoc.jenkins-ci.org/hudson/scm/ChangeLogSet.html
+    def changeLogSets = currentBuild.changeSets
+    for (int i = 0; i < changeLogSets.size(); i++) {
+        def entries = changeLogSets[i].items
+        for (int j = 0; j < entries.size(); j++) {
+            def entry = entries[j]
+			if (entry.msg.contains('[skip ci]')) {
+				echo "skipping commit: ${entry.msg}"
+				continue; // skip this commit
+			}
+			// echo "checking commit: ${entry.msg}"
+            def paths = entry.affectedPaths
+			for (int k = 0; k < paths.size(); k++) {
+				def path = paths[k]
+				if (path.startsWith('apidoc/')) {
+					return true
 				}
-				// copy over any overridden unit tests into this workspace
-				sh 'rm -rf tests'
-				unstash 'override-tests'
-				sh 'cp -R tests/ titanium-mobile-mocha-suite'
-				// Now run the unit test suite
-				dir('titanium-mobile-mocha-suite/scripts') {
-					nodejs(nodeJSInstallationName: "node ${nodeVersion}") {
-						sh 'npm install .'
-						try {
-							sh "node test.js -b ../../${zipName} -p ${os}"
-						} catch (e) {
-							if ('ios'.equals(os)) {
-								// Gather the crash report(s)
-								def home = sh(returnStdout: true, script: 'printenv HOME').trim()
-								sh "mv ${home}/Library/Logs/DiagnosticReports/mocha_*.crash ."
-								archiveArtifacts 'mocha_*.crash'
-								sh 'rm -f mocha_*.crash'
+			}
+        }
+    }
+	return false
+}
+
+def getBuiltSDK() {
+	// Unarchive the osx build of the SDK (as a zip)
+	sh 'rm -rf osx.zip' // delete osx.zip file if it already exists
+	unarchive mapping: ['dist/mobilesdk-*-osx.zip': 'osx.zip'] // grab the osx zip from our current build
+	return sh(returnStdout: true, script: 'ls osx.zip/dist/mobilesdk-*-osx.zip').trim()
+}
+
+def gatherAndroidCrashReports() {
+	// gather crash reports/tombstones for Android
+	timeout(5) {
+		sh label: 'gather crash reports/tombstones for Android', returnStatus: true, script: './tests/adb-all.sh pull /data/tombstones'
+		archiveArtifacts allowEmptyArchive: true, artifacts: 'tombstones/'
+		sh returnStatus: true, script: 'rm -rf tombstones/'
+		// wipe tombstones and re-build dir with proper permissions/ownership on emulator
+		sh returnStatus: true, script: './tests/adb-all.sh shell rm -rf /data/tombstones'
+		sh returnStatus: true, script: './tests/adb-all.sh shell mkdir -m 771 /data/tombstones'
+		sh returnStatus: true, script: './tests/adb-all.sh shell chown system:system /data/tombstones'
+	}
+}
+
+def androidUnitTests(nodeVersion, npmVersion, testOnDevices) {
+	return {
+		def labels = 'git && osx && android-emulator && android-sdk' // FIXME get working on windows/linux!
+		if (testOnDevices) {
+			labels += ' && macos-rocket' // run main branch tests on devices, use node with devices connected
+		}
+
+		node(labels) {
+			// TODO: Do a shallow checkout rather than stash/unstash?
+			unstash 'mocha-tests'
+			try {
+				nodejs(nodeJSInstallationName: "node ${nodeVersion}") {
+					ensureNPM(npmVersion)
+					sh 'npm ci'
+					def zipName = getBuiltSDK()
+					sh label: 'Install SDK', script: "npm run deploy -- ${zipName} --select" // installs the sdk
+					try {
+						timeout(30) {
+							// Forcibly remove value for specific build tools version to use (set by module builds)
+							sh returnStatus: true, script: 'ti config android.buildTools.selectedVersion --remove'
+							// run main branch tests on devices
+							if (testOnDevices) {
+								sh label: 'Run Test Suite on device(s)', script: "npm run test:integration -- android -T device -C all"
+							// run PR tests on emulator
 							} else {
-								// FIXME gather crash reports/tombstones for Android?
+								sh label: 'Run Test Suite on emulator', script: "npm run test:integration -- android -T emulator -D test -C android-28-playstore-x86"
 							}
-							throw e
+						} // timeout
+					} catch (e) {
+						gatherAndroidCrashReports()
+						throw e
+					} finally {
+						try {
+							// Kill the app and emulators!
+							timeout(5) {
+								sh returnStatus: true, script: './tests/adb-all.sh shell am force-stop com.appcelerator.testApp.testing'
+								sh returnStatus: true, script: './tests/adb-all.sh uninstall com.appcelerator.testApp.testing'
+							}
+							killAndroidEmulators()
 						} finally {
-							// Kill the emulators!
-							if ('android'.equals(os)) {
-								sh 'adb shell am force-stop com.appcelerator.testApp.testing'
-								sh 'adb uninstall com.appcelerator.testApp.testing'
-								sh 'killall -9 emulator || echo ""'
-								sh 'killall -9 emulator64-arm || echo ""'
-								sh 'killall -9 emulator64-x86 || echo ""'
-							}
+							sh 'npm run clean:sdks' // remove non-GA sdks
+							sh 'npm run clean:modules' // remove modules
 						}
+					} // try/catch/finally
+					// save the junit reports as artifacts explicitly so danger.js can use them later
+					stash includes: 'junit.*.xml', name: 'test-report-android'
+					junit 'junit.*.xml'
+					archiveArtifacts allowEmptyArchive: true, artifacts: 'tests/diffs/'
+				} // nodejs
+			} finally {
+				deleteDir()
+			}
+		} // node
+	}
+}
+
+def iosUnitTests(deviceFamily, nodeVersion, npmVersion) {
+	return {
+		node('git && osx && xcode-11') { // Use xcode-11 to make use of ios 13 APIs
+			// TODO: Do a shallow checkout rather than stash/unstash?
+			unstash 'mocha-tests'
+			try {
+				nodejs(nodeJSInstallationName: "node ${nodeVersion}") {
+					ensureNPM(npmVersion)
+					sh 'npm ci'
+					def zipName = getBuiltSDK()
+					sh label: 'Install SDK', script: "npm run deploy -- ${zipName} --select" // installs the sdk
+					try {
+						timeout(20) {
+							sh label: 'Run Test Suite', script: "npm run test:integration -- ios -F ${deviceFamily}"
+						}
+					} catch (e) {
+						gatherIOSCrashReports('mocha') // app name is mocha
+						throw e
+					} finally {
+						sh 'npm run clean:sdks' // remove non-GA sdks
+						sh 'npm run clean:modules' // remove modules
 					}
 					// save the junit reports as artifacts explicitly so danger.js can use them later
-					stash includes: 'junit.*.xml', name: "test-report-${os}"
-					junit 'junit.*.xml'
-				}
-			} // timeout
+					stash includes: 'junit.ios.*.xml', name: "test-report-ios-${deviceFamily}"
+					junit 'junit.ios.*.xml'
+					// Save any diffed images
+					archiveArtifacts allowEmptyArchive: true, artifacts: 'tests/diffs/'
+				} // nodejs
+			} finally {
+				deleteDir()
+			}
 		}
 	}
 }
 
-@NonCPS
-def isMajorVersionLessThan(version, minValue) {
-	def versionMatcher = version =~ /(\d+)\.(\d+)\.(\d+)/
-	def majorVersion = versionMatcher[0][1].toInteger()
-	return majorVersion < minValue
+def cliUnitTests(nodeVersion, npmVersion) {
+	return {
+		node('git && osx') { // ToDo: refactor to try and run across mac, linux, and windows?
+			unstash 'cli-unit-tests'
+			nodejs(nodeJSInstallationName: "node ${nodeVersion}") {
+				ensureNPM(npmVersion)
+				sh 'npm ci'
+				try {
+					sh 'npm run test:cli'
+				} finally {
+					if (fileExists('coverage/cobertura-coverage.xml')) {
+						step([$class: 'CoberturaPublisher', autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: 'coverage/cobertura-coverage.xml', failUnhealthy: false, failUnstable: false, maxNumberOfBuilds: 0, onlyStable: false, sourceEncoding: 'ASCII', zoomCoverageChart: false])
+					}
+					stash includes: 'junit.cli.report.xml', name: 'test-report-cli'
+					junit 'junit.cli.report.xml'
+				}
+			}
+		}
+	}
 }
 
 // Wrap in timestamper
 timestamps {
-	def targetBranch
 	try {
-		node('git && android-sdk && android-ndk && ant && gperf && osx') {
+		node('git && android-sdk && android-ndk && ant && gperf && osx && xcode-11') {
 			stage('Checkout') {
 				// Update our shared reference repo for all branches/PRs
 				dir('..') {
 					if (fileExists('titanium_mobile.git')) {
 						dir('titanium_mobile.git') {
+							sh 'git gc'
 							sh 'git remote update -p' // update the clone
 							sh 'git prune' // prune to avoid "warning: There are too many unreachable loose objects"
 						}
@@ -125,77 +212,45 @@ timestamps {
 				])
 				// FIXME: Workaround for missing env.GIT_COMMIT: http://stackoverflow.com/questions/36304208/jenkins-workflow-checkout-accessing-branch-name-and-git-commit
 				gitCommit = sh(returnStdout: true, script: 'git rev-parse HEAD').trim()
-				isPR = env.BRANCH_NAME.startsWith('PR-')
-				isMainlineBranch = (env.BRANCH_NAME ==~ MAINLINE_BRANCH_REGEXP)
-				// target branch of windows SDK to use and test suite to test with
-				if (isPR) {
-					targetBranch = env.CHANGE_TARGET
-				} else if (isMainlineBranch) { // if it's a mainline branch, use the same branch for titanium_mobile_windows
-					targetBranch = env.BRANCH_NAME
-				}
-				if (!targetBranch) { // if all else fails, use master as SDK branch to test with
-					targetBranch = 'master'
-				}
 			}
 
 			nodejs(nodeJSInstallationName: "node ${nodeVersion}") {
 
 				stage('Lint') {
-					// NPM 5.2.0 had a bug that broke pruning to production, but latest npm 5.4.1 works well
-					sh "npm install -g npm@${npmVersion}"
+					ensureNPM(npmVersion)
 
 					// Install dependencies
 					timeout(5) {
-						// FIXME Do we need to do anything special to make sure we get os-specific modules only on that OS's build/zip?
-						sh 'npm install'
+						sh 'npm ci'
 					}
 					// Run npm test, but record output in a file and check for failure of command by checking output
 					if (fileExists('npm_test.log')) {
 						sh 'rm -rf npm_test.log'
 					}
-					def npmTestResult = sh(returnStatus: true, script: 'npm test &> npm_test.log')
-					if (isPR) { // Stash files for danger.js later
-						stash includes: 'node_modules/,package.json,package-lock.json,dangerfile.js,npm_test.log,android/**/*.java', name: 'danger'
+					// forcibly grab and set correct value for android sdk path by grabbing from node we're actually building on (using env.ANDROID_SDK will pick up master node's env value!)
+					def androidSDK = env.ANDROID_SDK
+					withEnv(['ANDROID_SDK=']) {
+					    try {
+							androidSDK = sh(returnStdout: true, script: 'printenv ANDROID_SDK').trim()
+						} catch (e) {
+							// squash, env var not set at OS-level
+						}
 					}
+					def npmTestResult = sh(returnStatus: true, script: "ANDROID_SDK_ROOT=${androidSDK} npm test &> npm_test.log")
+					recordIssues(tools: [checkStyle(pattern: 'android/**/build/reports/checkstyle/checkJavaStyle.xml')])
+					if (runDanger) { // Stash files for danger.js later
+						stash includes: 'package.json,package-lock.json,dangerfile.js,.eslintignore,.eslintrc,npm_test.log,android/**/*.java', name: 'danger'
+					}
+					stash includes: 'package.json,package-lock.json,android/cli/**,iphone/cli/**', name: 'cli-unit-tests'
+					stash includes: 'package.json,package-lock.json,tests/**,build/**', name: 'mocha-tests'
 					// was it a failure?
 					if (npmTestResult != 0) {
-						// empty stashes of test reports, so danger step can still run.
-						stash allowEmpty: true, name: 'test-report-ios'
-						stash allowEmpty: true, name: 'test-report-android'
 						error readFile('npm_test.log')
+					} else if (env.BRANCH_NAME.equals('master') && hasAPIDocChanges()) {
+						// if we have a master branch build of SDK with updated apidocs, trigger a new doc site build
+						build job: 'docs/doctools/docs', wait: false
 					}
 				}
-
-				// Skip the Windows SDK portion if a PR, we don't need it
-				stage('Windows') {
-					if (!isPR) {
-						// This may be the very first build on this branch, so there's no windows build to grab yet
-						try {
-							sh 'curl -O http://builds.appcelerator.com.s3.amazonaws.com/mobile/branches.json'
-							if (fileExists('branches.json')) {
-								def branchesJSONContents = readFile('branches.json')
-								if (!branchesJSONContents.startsWith('<?xml')) { // May be an 'Access denied' xml file/response
-									def branchesJSON = jsonParse(branchesJSONContents)
-									isFirstBuildOnBranch = !(branchesJSON['branches'].contains(env.BRANCH_NAME))
-								}
-							}
-						} catch (err) {
-							// ignore? Not able to grab the branches.json, what should we assume? In 99.9% of the cases, it's not a new build
-						}
-
-						// If there's no windows build for this branch yet, use master
-						def windowsBranch = targetBranch
-						if (isFirstBuildOnBranch) {
-							windowsBranch = 'master'
-							manager.addWarningBadge("Looks like the first build on branch ${env.BRANCH_NAME}. Using 'master' branch build of Windows SDK to bootstrap.")
-						}
-						step([$class: 'CopyArtifact',
-							projectName: "../titanium_mobile_windows/${windowsBranch}",
-							selector: [$class: 'StatusBuildSelector', stable: false],
-							filter: 'dist/windows/'])
-						sh 'rm -rf windows; mv dist/windows/ windows/; rm -rf dist'
-					} // !isPR
-				} // stage
 
 				stage('Build') {
 					// Normal build, pull out the version
@@ -209,73 +264,57 @@ timestamps {
 					basename = "dist/mobilesdk-${vtag}"
 					echo "BASENAME:        ${basename}"
 
-					// TODO parallelize the iOS/Android/Mobileweb/Windows portions!
-					dir('build') {
+					ansiColor('xterm') {
 						timeout(15) {
-							sh "node scons.js build --android-ndk ${env.ANDROID_NDK_R12B} --android-sdk ${env.ANDROID_SDK}"
-						} // timeout
-						ansiColor('xterm') {
-							if (isPR) {
-								// For PR builds, just package android and iOS for osx
-								sh "node scons.js package android ios --version-tag ${vtag}"
-							} else {
-								// For non-PR builds, do all platforms for all OSes
-								timeout(15) {
-									sh "node scons.js package --version-tag ${vtag} --all"
-								} // timeout
+							def buildCommand = "npm run clean -- --android-ndk ${env.ANDROID_NDK_R16B}"
+							if (isMainlineBranch) {
+								buildCommand += ' --all'
 							}
-						} // ansiColor
-					} // dir
+							sh label: 'clean', script: buildCommand
+						} // timeout
+						timeout(15) {
+							def buildCommand = "npm run build -- --android-ndk ${env.ANDROID_NDK_R16B}"
+							if (isMainlineBranch) {
+								buildCommand += ' --all'
+							}
+							try {
+								sh label: 'build', script: buildCommand
+							} finally {
+								recordIssues(tools: [clang(), java()])
+							}
+						} // timeout
+						timeout(25) {
+							def packageCommand = "npm run package -- --version-tag ${vtag}"
+							if (isMainlineBranch) {
+								// on mainline builds, build for all 3 host OSes
+								packageCommand += ' --all'
+							} else {
+								// On PRs, just build android and ios for macOS
+								packageCommand += ' android ios'
+							}
+							sh label: 'package', script: packageCommand
+						} // timeout
+					} // ansiColor
+
 					archiveArtifacts artifacts: "${basename}-*.zip"
 					stash includes: 'dist/parity.html', name: 'parity'
-					stash includes: 'tests/', name: 'override-tests'
 				} // end 'Build' stage
-
-				if (isMainlineBranch) {
-					stage('Security') {
-						// Clean up and install only production dependencies
-						sh 'npm prune --production'
-
-						// Scan for Dependency Check and RetireJS warnings
-						def scanFiles = [[path: 'dependency-check-report.xml']]
-						dependencyCheckAnalyzer datadir: '', hintsFile: '', includeCsvReports: true, includeHtmlReports: true, includeJsonReports: true, isAutoupdateDisabled: false, outdir: '', scanpath: 'package.json', skipOnScmChange: false, skipOnUpstreamChange: false, suppressionFile: '', zipExtensions: ''
-						dependencyCheckPublisher canComputeNew: false, defaultEncoding: '', healthy: '', pattern: '', unHealthy: ''
-
-						// Adding appc-license scan, until we can get the output from Dependency Check/Track
-						sh 'npm install appc-license'
-						sh 'npx appc-license > output.csv'
-						archiveArtifacts 'output.csv'
-
-						sh 'npm install -g retire'
-						def retireExitCode = sh(returnStatus: true, script: 'retire --outputformat json --outputpath ./retire.json')
-						if (retireExitCode != 0) {
-							scanFiles << [path: 'retire.json']
-						}
-
-						// Don't publish to threadfix except for master builds
-						if ('master'.equals(env.BRANCH_NAME) && !scanFiles.isEmpty()) {
-							step([$class: 'ThreadFixPublisher', appId: '136', scanFiles: scanFiles])
-						}
-
-						// re-install dev dependencies for testing later...
-						sh(returnStatus: true, script: 'npm install --only=dev') // ignore PEERINVALID grunt issue for now
-					} // end 'Security' stage
-				}
 			} // nodeJs
 		} // end node for checkout/build
 
 		// Run unit tests in parallel for android/iOS
 		stage('Test') {
 			parallel(
-				'android unit tests': unitTests('android', nodeVersion, targetBranch),
-				'iOS unit tests': unitTests('ios', nodeVersion, targetBranch),
+				'android unit tests': androidUnitTests(nodeVersion, npmVersion, testOnDevices),
+				'iPhone unit tests': iosUnitTests('iphone', nodeVersion, npmVersion),
+				'iPad unit tests': iosUnitTests('ipad', nodeVersion, npmVersion),
+				'cli unit tests': cliUnitTests(nodeVersion, npmVersion),
 				failFast: true
 			)
 		}
 
 		stage('Deploy') {
-			// Push to S3 if on 'master' or "mainline" branch like 6_2_X, 7_0_X...
-			if (isMainlineBranch) {
+			if (publishToS3) {
 				// Now allocate a node for uploading artifacts to s3 and in Jenkins
 				node('(osx || linux) && !axway-internal && curl') {
 					def indexJson = []
@@ -404,59 +443,53 @@ timestamps {
 						pluginFailureResultConstraint: 'FAILURE',
 						userMetadata: []])
 
-					// Trigger titanium_mobile_windows if this is the first build on a "mainline" branch
-					if (isFirstBuildOnBranch) {
-						// Trigger build of titanium_mobile_windows in our pipeline multibranch group!
-						build job: "../titanium_mobile_windows/${env.BRANCH_NAME}", wait: false
-					}
 					// Now wipe the workspace. otherwise the unstashed artifacts will stick around on the node (master)
 					deleteDir()
 				} // node
-			} // isMainlineBranch
+			} // if(publishToS3)
 		} // stage
 	} // try
 	catch (err) {
 		// TODO Use try/catch at lower level (like around tests) so we can give more detailed failures?
 		currentBuild.result = 'FAILURE'
-		mail body: "project build error is here: ${env.BUILD_URL}",
-			from: 'hudson@appcelerator.com',
-			replyTo: 'no-reply@appcelerator.com',
-			subject: 'project build failed',
-			to: 'eng-platform@appcelerator.com'
 
 		throw err
 	}
 	finally {
-		// If we're building a PR, always try and run Danger.JS at the end so we can provide useful comments/info to the PR author
-		if (isPR) {
+		// Run Danger.JS at the end so we can provide useful comments/info to the PR/commit author
+		if (runDanger) {
 			stage('Danger') {
 				node('osx || linux') {
 					nodejs(nodeJSInstallationName: "node ${nodeVersion}") {
 						unstash 'danger' // this gives us dangerfile.js, package.json, package-lock.json, node_modules/, android java sources for format check
+
 						// ok to not grab crash logs, still run Danger.JS
 						try {
 							unarchive mapping: ['mocha_*.crash': '.'] // unarchive any iOS simulator crashes
 						} catch (e) {}
-						// ok to not grab test results, still run Danger.JS
-						try {
-							unstash 'test-report-ios' // junit.ios.report.xml
-						} catch (e) {}
-						try {
-							unstash 'test-report-android' // junit.android.report.xml
-						} catch (e) {}
-						sh "npm install -g npm@${npmVersion}"
+
+						// it's ok to not grab all test results, still run Danger.JS (even if some platforms crashed or we failed before tests)
+						def reports = [ 'ios-ipad', 'ios-iphone', 'android', 'cli' ]
+						for (int i = 0; i < reports.size(); i++) {
+							try {
+								unstash "test-report-${reports[i]}"
+							} catch (e) {}
+						}
+
+						ensureNPM(npmVersion)
+						sh 'npm ci'
 						// FIXME We need to hack the env vars for Danger.JS because it assumes Github Pull Request Builder plugin only
 						// We use Github branch source plugin implicitly through pipeline job
 						// See https://github.com/danger/danger-js/issues/379
-						withEnv(['ghprbGhRepository=appcelerator/titanium_mobile',"ghprbPullId=${env.CHANGE_ID}", "ZIPFILE=${basename}-osx.zip", "BUILD_STATUS=${currentBuild.currentResult}"]) {
+						withEnv(["ZIPFILE=${basename}-osx.zip", "BUILD_STATUS=${currentBuild.currentResult}","DANGER_JS_APP_INSTALL_ID=''"]) {
 							// FIXME Can't pass along env variables properly, so we cheat and write them as a JSON file we can require
 							sh 'node -p \'JSON.stringify(process.env)\' > env.json'
-							sh returnStatus: true, script: 'npx danger' // Don't fail build if danger fails. We want to retain existign build status.
+							sh returnStatus: true, script: 'npx danger ci --verbose' // Don't fail build if danger fails. We want to retain existing build status.
 						} // withEnv
 					} // nodejs
 					deleteDir()
 				} // node
 			} // Danger stage
-		} // isPR
+		} // if(runDanger)
 	}
 }

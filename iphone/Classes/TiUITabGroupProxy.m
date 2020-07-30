@@ -7,9 +7,9 @@
 #ifdef USE_TI_UITAB
 
 #import "TiUITabGroupProxy.h"
-#import "TiApp.h"
 #import "TiUITabGroup.h"
 #import "TiUITabProxy.h"
+#import <TitaniumKit/TiApp.h>
 
 @implementation TiUITabGroupProxy
 
@@ -169,6 +169,15 @@ static NSArray *tabGroupKeySequence;
   return NO;
 }
 
+- (void)fireFocusEvent
+{
+  if ([self _hasListeners:@"focus"]) {
+    // on an open, make sure we send the focus event to focused tab
+    NSDictionary *event = [((TiUITabGroup *)self.view) focusEvent];
+    [self fireEvent:@"focus" withObject:event];
+  }
+}
+
 - (void)gainFocus
 {
   if (!focussed) {
@@ -265,6 +274,16 @@ static NSArray *tabGroupKeySequence;
     return [[tabs objectAtIndex:blessedController] preferredStatusBarStyle];
   }
   return [super preferredStatusBarStyle];
+}
+
+- (BOOL)homeIndicatorAutoHide
+{
+  UITabBarController *tabController = [(TiUITabGroup *)[self view] tabController];
+  NSUInteger blessedController = [tabController selectedIndex];
+  if (blessedController != NSNotFound) {
+    return [[tabs objectAtIndex:blessedController] homeIndicatorAutoHide];
+  }
+  return [super homeIndicatorAutoHide];
 }
 
 - (BOOL)hidesStatusBar

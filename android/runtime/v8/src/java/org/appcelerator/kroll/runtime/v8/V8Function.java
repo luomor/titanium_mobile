@@ -48,7 +48,7 @@ public class V8Function extends V8Object implements KrollFunction, Handler.Callb
 
 	public Object callSync(KrollObject krollObject, Object[] args)
 	{
-		if (!KrollRuntime.isInitialized()) {
+		if (KrollRuntime.isDisposed()) {
 			Log.w(TAG, "Runtime disposed, cannot call function.");
 			return null;
 		}
@@ -95,7 +95,6 @@ public class V8Function extends V8Object implements KrollFunction, Handler.Callb
 		}
 
 		nativeRelease(functionPointer);
-		KrollRuntime.suggestGC();
 	}
 
 	@Override

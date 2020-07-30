@@ -18,7 +18,6 @@ import org.appcelerator.titanium.TiApplication;
 import org.appcelerator.titanium.TiBaseActivity;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.TiLifecycle;
-import org.appcelerator.titanium.io.TitaniumBlob;
 import org.appcelerator.titanium.proxy.TiViewProxy;
 import org.appcelerator.titanium.util.TiConvert;
 import org.appcelerator.titanium.view.TiCompositeLayout;
@@ -32,21 +31,20 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Messenger;
+import android.webkit.URLUtil;
 
-// clang-format off
 @Kroll.proxy(creatableInModule = MediaModule.class,
 	propertyAccessors = {
-		"url",
-		"initialPlaybackTime",
-		"duration",
-		"contentURL",
-		"autoplay",
-		"endPlaybackTime",
-		"playableDuration",
+		TiC.PROPERTY_URL,
+		TiC.PROPERTY_INITIAL_PLAYBACK_TIME,
+		TiC.PROPERTY_DURATION,
+		TiC.PROPERTY_CONTENT_URL,
+		TiC.PROPERTY_AUTOPLAY,
+		TiC.PROPERTY_END_PLAYBACK_TIME,
+		TiC.PROPERTY_PLAYABLE_DURATION,
 		TiC.PROPERTY_VOLUME,
-		TiC.PROPERTY_REPEAT_MODE
+		TiC.PROPERTY_SHOWS_CONTROLS,
 })
-// clang-format on
 public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifecycleEvent
 {
 	private static final String TAG = "VideoPlayerProxy";
@@ -93,6 +91,11 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 	{
 		super();
 		defaultValues.put(TiC.PROPERTY_VOLUME, 1.0f);
+		defaultValues.put(TiC.PROPERTY_SHOWS_CONTROLS, true);
+		defaultValues.put(TiC.PROPERTY_AUTOPLAY, true);
+		defaultValues.put(TiC.PROPERTY_DURATION, 0);
+		defaultValues.put(TiC.PROPERTY_END_PLAYBACK_TIME, 0); // match duration
+		defaultValues.put(TiC.PROPERTY_PLAYABLE_DURATION, 0); // match duration
 	}
 
 	@Override
@@ -305,11 +308,9 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 		}
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public boolean getPlaying()
-	// clang-format on
 	{
 		if (view != null) {
 			return getVideoView().isPlaying();
@@ -318,38 +319,30 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 		}
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public int getLoadState()
-	// clang-format on
 	{
 		return loadState;
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public int getPlaybackState()
-	// clang-format on
 	{
 		return playbackState;
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public int getRepeatMode()
-	// clang-format on
 	{
 		return repeatMode;
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.setProperty
 	public void setRepeatMode(int mode)
-	// clang-format on
 	{
 		boolean alert = (mode != repeatMode);
 		repeatMode = mode;
@@ -447,20 +440,16 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 		return handled;
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public int getMediaControlStyle()
-	// clang-format on
 	{
 		return mediaControlStyle;
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.setProperty
 	public void setMediaControlStyle(int style)
-	// clang-format on
 	{
 		boolean alert = (mediaControlStyle != style);
 		mediaControlStyle = style;
@@ -473,21 +462,17 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 		}
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public int getMovieControlMode()
-	// clang-format on
 	{
 		Log.w(TAG, "movieControlMode is deprecated.  Use mediaControlStyle instead.");
 		return getMediaControlStyle();
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.setProperty
 	public void setMovieControlMode(int style)
-	// clang-format on
 	{
 		Log.w(TAG, "movieControlMode is deprecated.  Use mediaControlStyle instead.");
 		setMediaControlStyle(style);
@@ -499,40 +484,32 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 	 * deprecated and cleaned up after TIMOB-2802 is resolved.
 	 * TODO
 	 */
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public int getMovieControlStyle()
-	// clang-format on
 	{
 		Log.w(TAG, "movieControlStyle is deprecated.  Use mediaControlStyle instead.");
 		return getMediaControlStyle();
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.setProperty
 	public void setMovieControlStyle(int style)
-	// clang-format on
 	{
 		Log.w(TAG, "movieControlStyle is deprecated.  Use mediaControlStyle instead.");
 		setMediaControlStyle(style);
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public int getScalingMode()
-	// clang-format on
 	{
 		return scalingMode;
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.setProperty
 	public void setScalingMode(int mode)
-	// clang-format on
 	{
 		boolean alert = (mode != scalingMode);
 		scalingMode = mode;
@@ -555,11 +532,9 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 		}
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.getProperty
 	public int getCurrentPlaybackTime()
-	// clang-format on
 	{
 		if (view != null) {
 			if (TiApplication.isUIThread()) {
@@ -578,11 +553,9 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 		}
 	}
 
-	// clang-format off
 	@Kroll.method
 	@Kroll.setProperty
 	public void setCurrentPlaybackTime(int milliseconds)
-	// clang-format on
 	{
 		Log.d(TAG, "setCurrentPlaybackTime(" + milliseconds + ")", Log.DEBUG_MODE);
 
@@ -806,15 +779,11 @@ public class VideoPlayerProxy extends TiViewProxy implements TiLifecycle.OnLifec
 			cancelAllThumbnailImageRequests();
 			mTiThumbnailRetriever = new TiThumbnailRetriever();
 			String url = TiConvert.toString(getProperty(TiC.PROPERTY_URL));
-			if (url.startsWith("file://")) {
-				mTiThumbnailRetriever.setUri(
-					Uri.parse(this.resolveUrl(null, TiConvert.toString(this.getProperty(TiC.PROPERTY_URL)))));
-			} else {
-				String path = url.contains(":") ? new TitaniumBlob(url).getNativePath() : resolveUrl(null, url);
-				Uri uri = Uri.parse(path);
-				mTiThumbnailRetriever.setUri(uri);
+			if (!URLUtil.isValidUrl(url)) {
+				url = resolveUrl(null, url);
 			}
-
+			Uri uri = Uri.parse(url);
+			mTiThumbnailRetriever.setUri(uri);
 			mTiThumbnailRetriever.getBitmap(TiConvert.toIntArray(times), TiConvert.toInt(option),
 											createThumbnailResponseHandler(callback));
 		}

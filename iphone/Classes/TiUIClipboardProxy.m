@@ -7,10 +7,10 @@
 
 #ifdef USE_TI_UICLIPBOARD
 #import "TiUIClipboardProxy.h"
-#import "TiApp.h"
-#import "TiBlob.h"
-#import "TiFile.h"
-#import "TiUtils.h"
+#import <TitaniumKit/TiApp.h>
+#import <TitaniumKit/TiBlob.h>
+#import <TitaniumKit/TiFile.h>
+#import <TitaniumKit/TiUtils.h>
 
 #import <MobileCoreServices/UTCoreTypes.h>
 #import <MobileCoreServices/UTType.h>
@@ -174,9 +174,10 @@ static NSString *mimeTypeToUTType(NSString *mimeType)
   ENSURE_STRING(arg);
   NSString *mimeType = arg;
   __block id result;
-  TiThreadPerformOnMainThread(^{
-    result = [[self getData_:mimeType] retain];
-  },
+  TiThreadPerformOnMainThread(
+      ^{
+        result = [[self getData_:mimeType] retain];
+      },
       YES);
   return [result autorelease];
 }
@@ -199,7 +200,7 @@ static NSString *mimeTypeToUTType(NSString *mimeType)
   case CLIPBOARD_IMAGE: {
     UIImage *image = board.image;
     if (image) {
-      return [[[TiBlob alloc] _initWithPageContext:[self pageContext] andImage:image] autorelease];
+      return [[[TiBlob alloc] initWithImage:image] autorelease];
     } else {
       return nil;
     }
@@ -209,7 +210,7 @@ static NSString *mimeTypeToUTType(NSString *mimeType)
     NSData *data = [board dataForPasteboardType:mimeTypeToUTType(mimeType)];
 
     if (data) {
-      return [[[TiBlob alloc] _initWithPageContext:[self pageContext] andData:data mimetype:mimeType] autorelease];
+      return [[[TiBlob alloc] initWithData:data mimetype:mimeType] autorelease];
     } else {
       return nil;
     }
@@ -235,152 +236,118 @@ static NSString *mimeTypeToUTType(NSString *mimeType)
   ENSURE_STRING_OR_NIL(arg);
   NSString *mimeType = arg;
   __block BOOL result = NO;
-  TiThreadPerformOnMainThread(^{
-    UIPasteboard *board = [self pasteboard];
-    ClipboardType dataType = mimeTypeToDataType(mimeType);
+  TiThreadPerformOnMainThread(
+      ^{
+        UIPasteboard *board = [self pasteboard];
+        ClipboardType dataType = mimeTypeToDataType(mimeType);
 
-    switch (dataType) {
-    case CLIPBOARD_TEXT: {
-      result = [board containsPasteboardTypes:UIPasteboardTypeListString];
-      break;
-    }
-    case CLIPBOARD_URI_LIST: {
-      result = [board containsPasteboardTypes:UIPasteboardTypeListURL];
-      break;
-    }
-    case CLIPBOARD_IMAGE: {
-      result = [board containsPasteboardTypes:UIPasteboardTypeListImage];
-      break;
-    }
-    case CLIPBOARD_COLOR: {
-      result = [board containsPasteboardTypes:UIPasteboardTypeListColor];
-      break;
-    }
-    case CLIPBOARD_UNKNOWN:
-    default: {
-      result = [board containsPasteboardTypes:[NSArray arrayWithObject:mimeTypeToUTType(mimeType)]];
-      break;
-    }
-    }
-  },
+        switch (dataType) {
+        case CLIPBOARD_TEXT: {
+          result = [board containsPasteboardTypes:UIPasteboardTypeListString];
+          break;
+        }
+        case CLIPBOARD_URI_LIST: {
+          result = [board containsPasteboardTypes:UIPasteboardTypeListURL];
+          break;
+        }
+        case CLIPBOARD_IMAGE: {
+          result = [board containsPasteboardTypes:UIPasteboardTypeListImage];
+          break;
+        }
+        case CLIPBOARD_COLOR: {
+          result = [board containsPasteboardTypes:UIPasteboardTypeListColor];
+          break;
+        }
+        case CLIPBOARD_UNKNOWN:
+        default: {
+          result = [board containsPasteboardTypes:[NSArray arrayWithObject:mimeTypeToUTType(mimeType)]];
+          break;
+        }
+        }
+      },
       YES);
   return NUMBOOL(result);
 }
 
 - (id)hasText:(id)unused
 {
-#if IS_XCODE_8
-  if ([TiUtils isIOS10OrGreater]) {
-    return NUMBOOL([[self pasteboard] hasStrings]);
-  }
-#endif
-
-  return [self hasData:@"text/plain"];
+  return NUMBOOL([[self pasteboard] hasStrings]);
 }
 
 - (id)hasColors:(id)unused
 {
-#if IS_XCODE_8
-  if ([TiUtils isIOS10OrGreater]) {
-    return NUMBOOL([[self pasteboard] hasColors]);
-  }
-#endif
-
-  NSLog(@"[WARN] Ti.UI.Clipboard.hasColors() is only available on iOS 10 and later.");
-  return NUMBOOL(NO);
+  return NUMBOOL([[self pasteboard] hasColors]);
 }
 
 - (id)hasImages:(id)unused
 {
-#if IS_XCODE_8
-  if ([TiUtils isIOS10OrGreater]) {
-    return NUMBOOL([[self pasteboard] hasImages]);
-  }
-#endif
-
-  NSLog(@"[WARN] Ti.UI.Clipboard.hasImages() is only available on iOS 10 and later.");
-  return NUMBOOL(NO);
+  return NUMBOOL([[self pasteboard] hasImages]);
 }
 
 - (id)hasURLs:(id)unused
 {
-#if IS_XCODE_8
-  if ([TiUtils isIOS10OrGreater]) {
-    return NUMBOOL([[self pasteboard] hasURLs]);
-  }
-#endif
-
-  NSLog(@"[WARN] Ti.UI.Clipboard.hasURLs() is only available on iOS 10 and later.");
-  return NUMBOOL(NO);
+  return NUMBOOL([[self pasteboard] hasURLs]);
 }
 
 - (void)setItems:(id)args
 {
-#if IS_XCODE_8
-  if ([TiUtils isIOS10OrGreater]) {
-    NSArray *items = [args objectForKey:@"items"];
-    NSDictionary *options = [args objectForKey:@"options"];
+  NSArray *items = [args objectForKey:@"items"];
+  NSDictionary *options = [args objectForKey:@"options"];
 
-    __block NSMutableArray *result = [[[NSMutableArray alloc] init] retain];
+  __block NSMutableArray *result = [[[NSMutableArray alloc] init] retain];
 
-    // The key of the items must be a string (mime-type)
-    for (id item in items) {
-      NSMutableDictionary *newDict = [[NSMutableDictionary alloc] init];
-      for (id key in item) {
-        ENSURE_TYPE(key, NSString);
-        [newDict setValue:[item valueForKey:key] forKey:mimeTypeToUTType(key)];
-      }
-      if (newDict != nil) {
-        [result addObject:newDict];
-      }
-      RELEASE_TO_NIL(newDict);
+  // The key of the items must be a string (mime-type)
+  for (id item in items) {
+    NSMutableDictionary *newDict = [[NSMutableDictionary alloc] init];
+    for (id key in item) {
+      ENSURE_TYPE(key, NSString);
+      [newDict setValue:[item valueForKey:key] forKey:mimeTypeToUTType(key)];
     }
-
-    TiThreadPerformOnMainThread(^{
-      if (options == nil) {
-        [[self pasteboard] setItems:result];
-      } else {
-        [[self pasteboard] setItems:result options:options];
-      }
-      RELEASE_TO_NIL(result);
-    },
-        YES);
+    if (newDict != nil) {
+      [result addObject:newDict];
+    }
+    RELEASE_TO_NIL(newDict);
   }
-#endif
+
+  TiThreadPerformOnMainThread(
+      ^{
+        if (options == nil) {
+          [[self pasteboard] setItems:result];
+        } else {
+          [[self pasteboard] setItems:result options:options];
+        }
+        RELEASE_TO_NIL(result);
+      },
+      YES);
 }
 
 - (id)getItems:(id)unused
 {
-#if IS_XCODE_8
-  if ([TiUtils isIOS10OrGreater]) {
-    __block id items;
+  __block id items;
 
-    TiThreadPerformOnMainThread(^{
-      items = [[[self pasteboard] items] retain];
+  TiThreadPerformOnMainThread(
+      ^{
+        items = [[[self pasteboard] items] retain];
 
-      // Check for invalid UTI's / mime-types to prevent a runtime-crash
-      for (NSDictionary *item in items) {
-        for (NSString *key in [item allKeys]) {
-          if ([key hasPrefix:@"dyn."]) {
-            NSLog(@"[ERROR] Invalid mime-type specified to setItems() before. Returning an empty result ...");
+        // Check for invalid UTI's / mime-types to prevent a runtime-crash
+        for (NSDictionary *item in items) {
+          for (NSString *key in [item allKeys]) {
+            if ([key hasPrefix:@"dyn."]) {
+              NSLog(@"[ERROR] Invalid mime-type specified to setItems() before. Returning an empty result ...");
 
-            RELEASE_TO_NIL(items);
-            items = @[];
+              RELEASE_TO_NIL(items);
+              items = @[];
+              break;
+            }
+          }
+          if ([items count] == 0) {
             break;
           }
         }
-        if ([items count] == 0) {
-          break;
-        }
-      }
-    },
-        YES);
+      },
+      YES);
 
-    return [items autorelease];
-  }
-#endif
-
-  return @[];
+  return [items autorelease];
 }
 
 - (void)setData:(id)args

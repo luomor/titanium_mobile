@@ -11,6 +11,7 @@ import java.lang.ref.WeakReference;
 import java.util.HashMap;
 
 import org.appcelerator.kroll.KrollDict;
+import org.appcelerator.kroll.KrollProxy;
 import org.appcelerator.kroll.annotations.Kroll;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.proxy.TiViewProxy;
@@ -55,6 +56,11 @@ public class ListItemProxy extends TiViewProxy
 			TiViewProxy source = (TiViewProxy) eventData.get(TiC.EVENT_PROPERTY_SOURCE);
 			if (source != null && !source.equals(this) && listProxy != null) {
 
+				// FIXME: We should not need to create a placeholder proxy for each item. ListView needs refactoring to remedy this.
+				source = (TiViewProxy) KrollProxy.createProxy(source.getClass(), source.getKrollObject(), new Object[0],
+															  source.getCreationUrl().url);
+				eventData.put(TiC.EVENT_PROPERTY_SOURCE, source);
+
 				// append bind properties
 				if (eventData.containsKey(TiC.PROPERTY_BIND_ID) && eventData.containsKey(TiC.PROPERTY_ITEM_INDEX)
 					&& eventData.containsKey(TiC.PROPERTY_SECTION)) {
@@ -62,7 +68,7 @@ public class ListItemProxy extends TiViewProxy
 					String bindId = eventData.getString(TiC.PROPERTY_BIND_ID);
 					ListSectionProxy section = (ListSectionProxy) eventData.get(TiC.PROPERTY_SECTION);
 					KrollDict itemProperties = section.getItemAt(itemIndex);
-					if (itemProperties.containsKey(bindId)) {
+					if (itemProperties != null && itemProperties.containsKey(bindId)) {
 						KrollDict properties = itemProperties.getKrollDict(bindId);
 						for (String key : properties.keySet()) {
 							source.setProperty(key, properties.get(key));
